@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Task Manager — Plugin Test</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: #f4f5f7;
+    color: #172b4d;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 2rem 1rem;
+  }
+  .container { max-width: 900px; width: 100%; }
+
+  /* header */
+  .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 0.75rem; }
+  .header h1 { font-size: 1.5rem; font-weight: 600; color: #0747a6; }
+  .header .badge { font-size: 0.75rem; color: #5e6c84; background: #ebecf0; padding: 0.2rem 0.6rem; border-radius: 999px; }
+
+  /* toolbar */
+  .toolbar { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+  .toolbar .search-box { flex: 1; min-width: 180px; display: flex; gap: 0.5rem; }
+  .toolbar .search-box input { flex: 1; padding: 0.5rem 0.75rem; border: 1px solid #dfe1e6; border-radius: 4px; font-size: 0.875rem; outline: none; transition: border 0.15s; }
+  .toolbar .search-box input:focus { border-color: #4c9aff; box-shadow: 0 0 0 2px rgba(76,154,255,0.2); }
+  .toolbar button { padding: 0.5rem 1rem; border: none; border-radius: 4px; font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: background 0.15s, transform 0.1s; }
+  .toolbar button:active { transform: scale(0.97); }
+  .btn-primary { background: #0052cc; color: #fff; }
+  .btn-primary:hover { background: #0065ff; }
+  .btn-secondary { background: #ebecf0; color: #172b4d; }
+  .btn-secondary:hover { background: #dfe1e6; }
+  .btn-danger { background: #de350b; color: #fff; }
+  .btn-danger:hover { background: #bf2600; }
+  .btn-ghost { background: transparent; color: #5e6c84; }
+  .btn-ghost:hover { background: #ebecf0; }
+
+  /* analytics test bench */
+  .analytics-panel { background: #fff; border: 1px solid #dfe1e6; border-radius: 8px; margin-bottom: 1rem; padding: 1rem; }
+  .analytics-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
+  .analytics-head h2 { font-size: 1rem; color: #172b4d; margin-bottom: 0.25rem; }
+  .analytics-head p { color: #5e6c84; font-size: 0.8rem; line-height: 1.45; }
+  .analytics-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.5rem; margin-bottom: 0.75rem; }
+  .analytics-actions button { min-height: 38px; padding: 0.5rem 0.75rem; border: none; border-radius: 4px; color: #fff; font-size: 0.84rem; font-weight: 600; cursor: pointer; transition: filter 0.15s, transform 0.1s; }
+  .analytics-actions button:hover { filter: brightness(1.06); }
+  .analytics-actions button:active { transform: scale(0.98); }
+  .btn-track-a { background: #0052cc; }
+  .btn-track-b { background: #00875a; }
+  .btn-track-c { background: #6554c0; }
+  .btn-track-d { background: #ff991f; color: #172b4d !important; }
+  .analytics-log { display: grid; grid-template-columns: 150px 1fr; gap: 0.75rem; align-items: stretch; }
+  .analytics-counter { background: #f4f5f7; border-radius: 6px; padding: 0.75rem; }
+  .analytics-counter span { display: block; color: #5e6c84; font-size: 0.75rem; margin-bottom: 0.35rem; }
+  .analytics-counter strong { font-size: 1.75rem; color: #0747a6; }
+  .analytics-output { background: #172b4d; color: #e6fcff; border-radius: 6px; padding: 0.75rem; min-height: 86px; overflow: auto; font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; font-size: 0.75rem; line-height: 1.5; white-space: pre-wrap; }
+  @media (max-width: 720px) {
+    .analytics-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .analytics-log { grid-template-columns: 1fr; }
+  }
+
+  /* table */
+  .table-wrap { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  thead { background: #f8f9fa; }
+  th { text-align: left; padding: 0.75rem 1rem; font-size: 0.8rem; font-weight: 600; color: #5e6c84; text-transform: uppercase; letter-spacing: 0.03em; border-bottom: 2px solid #dfe1e6; }
+  td { padding: 0.75rem 1rem; font-size: 0.875rem; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #fafbfc; }
+  .col-actions { white-space: nowrap; text-align: right; }
+  .col-actions button { margin-left: 0.25rem; }
+
+  /* status badges */
+  .status { display: inline-block; padding: 0.15rem 0.6rem; border-radius: 999px; font-size: 0.75rem; font-weight: 500; }
+  .status-pending { background: #fff7e6; color: #bf8f00; }
+  .status-in_progress { background: #eae6ff; color: #5243aa; }
+  .status-done { background: #e3fcef; color: #00875a; }
+
+  /* modal */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.35); align-items: center; justify-content: center; z-index: 1000; }
+  .modal-overlay.active { display: flex; }
+  .modal { background: #fff; border-radius: 10px; width: 90%; max-width: 520px; max-height: 90vh; overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,0.18); padding: 1.5rem; }
+  .modal h2 { font-size: 1.2rem; margin-bottom: 1rem; }
+  .modal .form-group { margin-bottom: 1rem; }
+  .modal label { display: block; font-size: 0.8rem; font-weight: 600; color: #5e6c84; margin-bottom: 0.3rem; text-transform: uppercase; letter-spacing: 0.03em; }
+  .modal input, .modal textarea, .modal select { width: 100%; padding: 0.55rem 0.75rem; border: 1px solid #dfe1e6; border-radius: 4px; font-size: 0.875rem; outline: none; transition: border 0.15s; font-family: inherit; }
+  .modal input:focus, .modal textarea:focus, .modal select:focus { border-color: #4c9aff; box-shadow: 0 0 0 2px rgba(76,154,255,0.2); }
+  .modal textarea { resize: vertical; min-height: 80px; }
+  .modal .form-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
+
+  /* empty */
+  .empty-state { text-align: center; padding: 3rem 1rem; color: #7a869a; }
+  .empty-state svg { margin-bottom: 0.75rem; opacity: 0.3; }
+  .empty-state p { font-size: 0.9rem; }
+
+  /* toast */
+  .toast { position: fixed; bottom: 1.5rem; right: 1.5rem; padding: 0.75rem 1.25rem; border-radius: 6px; font-size: 0.875rem; color: #fff; opacity: 0; transform: translateY(10px); transition: opacity 0.3s, transform 0.3s; z-index: 2000; pointer-events: none; }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast.success { background: #00875a; }
+  .toast.error { background: #de350b; }
+  .toast.info { background: #0052cc; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div>
+      <h1>Task Manager</h1>
+      <span class="badge">Plugin Test App</span>
+    </div>
+    <div style="font-size:0.8rem;color:#5e6c84;">
+      RESTful CRUD · SQLite · Flask
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <div class="search-box">
+      <input type="text" id="searchInput" placeholder="搜索任务标题或描述..." oninput="doSearch()">
+        <button class="btn-primary" onclick="doSearch()">查询</button>
+      <button class="btn-secondary" onclick="document.getElementById('searchInput').value='';doSearch()">清空</button>
+    </div>
+    <button class="btn-primary" onclick="openCreateModal()">+ 新增任务</button>
+    <button class="btn-secondary" onclick="loadTasks()">刷新</button>
+  </div>
+
+  <section class="analytics-panel" aria-label="埋点测试台">
+    <div class="analytics-head">
+      <div>
+        <h2>埋点测试台</h2>
+        <p>点击下面按钮会请求 <strong>POST /api/analytics/events</strong>，用于验证插件对按钮点击上报的抓取与分析。</p>
+      </div>
+      <button class="btn-secondary" onclick="loadAnalyticsEvents()">查看最近上报</button>
+    </div>
+    <div class="analytics-actions">
+      <button class="btn-track-a" data-analytics-button="primary_cta" data-scenario="conversion">主按钮点击</button>
+      <button class="btn-track-b" data-analytics-button="save_draft" data-scenario="workflow">保存草稿</button>
+      <button class="btn-track-c" data-analytics-button="export_report" data-scenario="download">导出报告</button>
+      <button class="btn-track-d" data-analytics-button="upgrade_plan" data-scenario="billing">升级套餐</button>
+    </div>
+    <div class="analytics-log">
+      <div class="analytics-counter">
+        <span>本页点击上报</span>
+        <strong id="analyticsCount">0</strong>
+      </div>
+      <pre class="analytics-output" id="analyticsOutput">等待点击测试按钮...</pre>
+    </div>
+  </section>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:40px;">ID</th>
+          <th>标题</th>
+          <th style="width:150px;">描述</th>
+          <th style="width:100px;">状态</th>
+          <th style="width:80px;">操作</th>
+        </tr>
+      </thead>
+      <tbody id="taskBody"></tbody>
+    </table>
+    <div id="emptyState" class="empty-state" style="display:none;">
+      <p>暂无任务数据</p>
+    </div>
+  </div>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <h2 id="modalTitle">新增任务</h2>
+    <div class="form-group">
+      <label for="modalTitleInput">标题 *</label>
+      <input type="text" id="modalTitleInput" placeholder="输入任务标题">
+    </div>
+    <div class="form-group">
+      <label for="modalDescInput">描述</label>
+      <textarea id="modalDescInput" placeholder="输入任务描述（可选）"></textarea>
+    </div>
+    <div class="form-group">
+      <label for="modalStatusSelect">状态</label>
+      <select id="modalStatusSelect">
+        <option value="pending">待办</option>
+        <option value="in_progress">进行中</option>
+        <option value="done">已完成</option>
+      </select>
+    </div>
+    <div class="form-actions">
+      <button class="btn-secondary" onclick="closeModal()">取消</button>
+      <button class="btn-primary" id="modalSaveBtn" onclick="saveTask()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+let editingId = null;
+let analyticsCount = 0;
+let analyticsSequence = 0;
+const analyticsSessionId = getAnalyticsSessionId();
+
+function toast(msg, type = 'success') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast ' + type + ' show';
+  setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, {
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    ...opts,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || res.statusText);
+  }
+  return res.json();
+}
+
+function getAnalyticsSessionId() {
+  const key = 'plugin_test_analytics_session_id';
+  let value = sessionStorage.getItem(key);
+  if (!value) {
+    value = 'sess_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
+    sessionStorage.setItem(key, value);
+  }
+  return value;
+}
+
+function updateAnalyticsOutput(data) {
+  document.getElementById('analyticsOutput').textContent = JSON.stringify(data, null, 2);
+}
+
+async function reportButtonClick(button) {
+  analyticsSequence += 1;
+  const payload = {
+    event_name: 'plugin_test_button_click',
+    event_type: 'button_click',
+    button_id: button.dataset.analyticsButton,
+    button_text: button.textContent.trim(),
+    scenario: button.dataset.scenario,
+    session_id: analyticsSessionId,
+    trace_id: 'trace_' + Date.now().toString(36) + '_' + analyticsSequence,
+    sequence: analyticsSequence,
+    user_id: 'demo-user-1001',
+    page_url: window.location.href,
+    pathname: window.location.pathname,
+    client_ts: new Date().toISOString(),
+    properties: {
+      app: 'plugin-test-app',
+      source: 'manual-test-button',
+      viewport: window.innerWidth + 'x' + window.innerHeight,
+      language: navigator.language
+    }
+  };
+
+  try {
+    const result = await api('/api/analytics/events', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Plugin-Test-Event': 'button-click'
+      },
+      body: JSON.stringify(payload)
+    });
+    analyticsCount += 1;
+    document.getElementById('analyticsCount').textContent = analyticsCount;
+    updateAnalyticsOutput(result);
+    toast('埋点已上报 #' + result.id, 'info');
+  } catch (e) {
+    updateAnalyticsOutput({ error: e.message, payload });
+    toast('埋点上报失败: ' + e.message, 'error');
+  }
+}
+
+async function loadAnalyticsEvents() {
+  try {
+    const events = await api('/api/analytics/events?limit=5');
+    updateAnalyticsOutput(events);
+    toast('已加载最近 ' + events.length + ' 条上报', 'info');
+  } catch (e) {
+    toast('读取埋点失败: ' + e.message, 'error');
+  }
+}
+
+function statusBadge(s) {
+  const labels = { pending: '待办', in_progress: '进行中', done: '已完成' };
+  return `<span class="status status-${s}">${labels[s] || s}</span>`;
+}
+
+async function loadTasks() {
+  try {
+    const data = await api('/api/tasks');
+    const tbody = document.getElementById('taskBody');
+    const empty = document.getElementById('emptyState');
+    if (data.length === 0) {
+      tbody.innerHTML = '';
+      empty.style.display = 'block';
+      return;
+    }
+    empty.style.display = 'none';
+    tbody.innerHTML = data.map(t => `
+      <tr>
+        <td style="font-size:0.8rem;color:#7a869a;">${t.id}</td>
+        <td><strong>${esc(t.title)}</strong></td>
+        <td style="color:#5e6c84;font-size:0.8rem;">${esc(t.description || '-')}</td>
+        <td>${statusBadge(t.status)}</td>
+        <td class="col-actions">
+          <button class="btn-ghost" onclick="openEditModal(${t.id})" title="编辑">✎</button>
+          <button class="btn-danger" onclick="deleteTask(${t.id})" title="删除">×</button>
+        </td>
+      </tr>
+    `).join('');
+  } catch (e) {
+    toast('加载失败: ' + e.message, 'error');
+  }
+}
+
+async function doSearch() {
+  const q = document.getElementById('searchInput').value.trim();
+  try {
+    const data = q ? await api('/api/tasks/search?q=' + encodeURIComponent(q)) : await api('/api/tasks');
+    const tbody = document.getElementById('taskBody');
+    const empty = document.getElementById('emptyState');
+    if (data.length === 0) {
+      tbody.innerHTML = '';
+      empty.style.display = 'block';
+      return;
+    }
+    empty.style.display = 'none';
+    tbody.innerHTML = data.map(t => `
+      <tr>
+        <td style="font-size:0.8rem;color:#7a869a;">${t.id}</td>
+        <td><strong>${esc(t.title)}</strong></td>
+        <td style="color:#5e6c84;font-size:0.8rem;">${esc(t.description || '-')}</td>
+        <td>${statusBadge(t.status)}</td>
+        <td class="col-actions">
+          <button class="btn-ghost" onclick="openEditModal(${t.id})">✎</button>
+          <button class="btn-danger" onclick="deleteTask(${t.id})">×</button>
+        </td>
+      </tr>
+    `).join('');
+  } catch (e) {
+    toast('搜索失败: ' + e.message, 'error');
+  }
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// Modal
+function openCreateModal() {
+  editingId = null;
+  document.getElementById('modalTitle').textContent = '新增任务';
+  document.getElementById('modalTitleInput').value = '';
+  document.getElementById('modalDescInput').value = '';
+  document.getElementById('modalStatusSelect').value = 'pending';
+  document.getElementById('modalOverlay').classList.add('active');
+  document.getElementById('modalTitleInput').focus();
+}
+
+async function openEditModal(id) {
+  try {
+    const t = await api('/api/tasks/' + id);
+    editingId = id;
+    document.getElementById('modalTitle').textContent = '编辑任务 #' + id;
+    document.getElementById('modalTitleInput').value = t.title;
+    document.getElementById('modalDescInput').value = t.description || '';
+    document.getElementById('modalStatusSelect').value = t.status;
+    document.getElementById('modalOverlay').classList.add('active');
+    document.getElementById('modalTitleInput').focus();
+  } catch (e) {
+    toast('加载任务失败: ' + e.message, 'error');
+  }
+}
+
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('active');
+}
+
+async function saveTask() {
+  const title = document.getElementById('modalTitleInput').value.trim();
+  if (!title) {
+    toast('请输入任务标题', 'error');
+    return;
+  }
+  const description = document.getElementById('modalDescInput').value.trim();
+  const status = document.getElementById('modalStatusSelect').value;
+  try {
+    if (editingId) {
+      await api('/api/tasks/' + editingId, { method: 'PUT', body: JSON.stringify({ title, description, status }) });
+      toast('任务已更新');
+    } else {
+      await api('/api/tasks', { method: 'POST', body: JSON.stringify({ title, description, status }) });
+      toast('任务已创建');
+    }
+    closeModal();
+    loadTasks();
+  } catch (e) {
+    toast('保存失败: ' + e.message, 'error');
+  }
+}
+
+async function deleteTask(id) {
+  if (!confirm('确定要删除任务 #' + id + ' 吗？')) return;
+  try {
+    await api('/api/tasks/' + id, { method: 'DELETE' });
+    toast('任务已删除');
+    loadTasks();
+  } catch (e) {
+    toast('删除失败: ' + e.message, 'error');
+  }
+}
+
+// Close modal on overlay click
+document.getElementById('modalOverlay').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+// Enter key in modal title input triggers save
+document.getElementById('modalTitleInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') saveTask();
+});
+
+document.querySelectorAll('[data-analytics-button]').forEach(button => {
+  button.addEventListener('click', () => reportButtonClick(button));
+});
+
+// Init
+loadTasks();
+loadAnalyticsEvents();
+</script>
+</body>
+</html>
