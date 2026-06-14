@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Studio</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div id="app">
+    <!-- 头部 -->
+    <header class="header">
+      <h1 class="title">
+        <span class="logo-icon">🔌</span>
+        API Studio
+      </h1>
+      <button class="btn btn-primary" id="addRuleBtn">+ 新建规则</button>
+    </header>
+
+    <!-- 从 Network 捕获的请求 -->
+    <div class="capture-section" id="captureSection" style="display:none">
+      <div class="capture-header">
+        <span class="capture-title">📡 从 F12 Network 捕获</span>
+        <button class="btn btn-text btn-sm" id="clearCaptureBtn">清空</button>
+      </div>
+      <div class="capture-list" id="captureList"></div>
+    </div>
+
+    <!-- 规则列表 -->
+    <div class="rule-list" id="ruleList">
+      <div class="empty-state" id="emptyState">
+        <div class="empty-icon">📋</div>
+        <p>暂无规则</p>
+        <p class="empty-hint">点击上方按钮添加接口模拟规则</p>
+      </div>
+    </div>
+
+    <!-- 底部统计 -->
+    <footer class="footer" id="footer">
+      <span id="statsText">共 0 条规则，0 条启用</span>
+    </footer>
+  </div>
+
+  <!-- 编辑弹窗 -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal" id="modal">
+      <div class="modal-header">
+        <h2 id="modalTitle">新建规则</h2>
+        <button class="btn-icon" id="closeModalBtn">✕</button>
+      </div>
+      <div class="modal-body">
+        <!-- 基本信息 -->
+        <div class="form-section">
+          <label class="form-label">规则名称</label>
+          <input type="text" class="form-input" id="ruleName" placeholder="例如：用户信息接口模拟">
+        </div>
+
+        <div class="form-section">
+          <label class="form-label">请求方法</label>
+          <select class="form-select" id="ruleMethod">
+            <option value="ANY">任意方法</option>
+            <option value="GET">GET</option>
+            <option value="POST">POST</option>
+            <option value="PUT">PUT</option>
+            <option value="DELETE">DELETE</option>
+            <option value="PATCH">PATCH</option>
+          </select>
+        </div>
+
+        <!-- URL 匹配 -->
+        <div class="form-section">
+          <label class="form-label">URL 路径</label>
+          <input type="text" class="form-input" id="urlPattern" placeholder="/api/user/info">
+        </div>
+
+        <!-- 响应设置 -->
+        <div class="form-section">
+          <label class="form-label">响应状态码</label>
+          <input type="number" class="form-input form-input-short" id="responseStatus" value="200" min="100" max="599">
+        </div>
+
+        <div class="form-section">
+          <label class="form-label">响应延迟 (毫秒)</label>
+          <input type="number" class="form-input form-input-short" id="responseDelay" value="0" min="0" max="30000" placeholder="0">
+        </div>
+
+        <div class="form-section">
+          <label class="form-label">响应头</label>
+          <div class="header-rows" id="headerRows">
+            <div class="header-row">
+              <input type="text" class="form-input form-input-sm" placeholder="Key" value="Content-Type">
+              <input type="text" class="form-input form-input-sm" placeholder="Value" value="application/json">
+              <button class="btn-icon btn-icon-sm remove-header-btn">✕</button>
+            </div>
+          </div>
+          <button class="btn btn-text" id="addHeaderBtn">+ 添加响应头</button>
+        </div>
+
+        <div class="form-section">
+          <label class="form-label">响应体</label>
+          <textarea class="form-textarea" id="responseBody" rows="6" placeholder='{"data": "模拟返回数据"}' spellcheck="false"></textarea>
+          <div class="textarea-actions">
+            <button class="btn btn-text" id="formatJsonBtn">格式化 JSON</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="cancelModalBtn">取消</button>
+        <button class="btn btn-danger" id="deleteRuleBtn" style="display:none">删除规则</button>
+        <button class="btn btn-primary" id="saveRuleBtn">保存规则</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
