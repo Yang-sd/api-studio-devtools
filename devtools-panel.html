@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>API Studio 面板</title>
+<title>API Studio DevTools</title>
 <link rel="stylesheet" href="devtools-panel.css">
 </head>
 <body>
@@ -12,14 +12,15 @@
   <div class="tab-bar">
     <div class="tab-left">
       <span class="brand">🔌 API Studio</span>
+      <button class="language-toggle" id="languageToggleBtn" type="button" title="Switch language">EN</button>
     </div>
     <div class="tab-nav">
-      <button class="tab active" data-tab="network">Network</button>
-      <button class="tab" data-tab="replay">Replay</button>
-      <button class="tab" data-tab="mock">Mock <span class="tab-hit-badge" id="totalHitsCount"></span><span class="tab-status-dot" id="mockTabStatusDot" title="Mock 总开关已启用"></span></button>
-      <button class="tab" data-tab="throttle">Throttle <span class="tab-status-dot" id="throttleTabStatusDot" title="弱网预设已启用"></span></button>
-      <button class="tab" data-tab="beacon">Beacon <span class="tab-hit-badge" id="beaconCountBadge"></span></button>
-      <button class="tab" data-tab="cookies">Cookies</button>
+      <button class="tab active" data-tab="network"><span data-i18n="tab.network">Network</span></button>
+      <button class="tab" data-tab="replay"><span data-i18n="tab.replay">Replay</span></button>
+      <button class="tab" data-tab="mock"><span data-i18n="tab.mock">Mock</span> <span class="tab-hit-badge" id="totalHitsCount"></span><span class="tab-status-dot" id="mockTabStatusDot" title="Mock 总开关已启用" data-i18n-title="status.mockOn"></span></button>
+      <button class="tab" data-tab="throttle"><span data-i18n="tab.throttle">Throttle</span> <span class="tab-status-dot" id="throttleTabStatusDot" title="弱网预设已启用" data-i18n-title="status.throttleOn"></span></button>
+      <button class="tab" data-tab="beacon"><span data-i18n="tab.beacon">Beacon</span> <span class="tab-hit-badge" id="beaconCountBadge"></span></button>
+      <button class="tab" data-tab="cookies"><span data-i18n="tab.cookies">Cookies</span></button>
     </div>
   </div>
 
@@ -27,33 +28,33 @@
   <div class="tab-content" id="tabMock">
     <div class="mock-toolbar">
       <div class="mock-toolbar-left">
-        <label class="mock-checkbox" title="全选/取消全选"><input type="checkbox" id="toggleAllCb"></label>
-        <button class="batch-bar" id="batchDeleteBtn">🗑 批量删除</button>
-        <button class="btn btn-primary" id="mockAddBtn">+ 新建规则</button>
+        <label class="mock-checkbox" title="全选/取消全选" data-i18n-title="common.selectAll"><input type="checkbox" id="toggleAllCb"></label>
+        <button class="batch-bar" id="batchDeleteBtn" data-i18n="mock.batchDelete">🗑 批量删除</button>
+        <button class="btn btn-primary" id="mockAddBtn" data-i18n="mock.newRule">+ 新建规则</button>
         <div class="group-select-wrap">
           <button class="group-drop-btn" id="groupDropBtn" type="button">▼</button>
-          <input class="group-input" id="groupInput" placeholder="搜索分组..." value="默认分组" autocomplete="off">
+          <input class="group-input" id="groupInput" placeholder="搜索分组..." data-i18n-placeholder="mock.searchGroup" value="默认分组" autocomplete="off">
           <div class="group-dropdown" id="groupDropdown"></div>
         </div>
-        <button class="btn btn-text btn-sm" id="addGroupBtn">+ 新建分组</button>
+        <button class="btn btn-text btn-sm" id="addGroupBtn" data-i18n="mock.newGroup">+ 新建分组</button>
       </div>
       
       <div class="mock-toolbar-right">
-        <div class="master-toggle" title="全局启用/禁用所有 Mock 规则">
+        <div class="master-toggle" title="全局启用/禁用所有 Mock 规则" data-i18n-title="mock.masterTitle">
           <label class="toggle toggle-lg">
             <input type="checkbox" id="masterToggle" checked>
             <span class="toggle-slider"></span>
             <span class="toggle-text" id="masterToggleText">开启</span>
           </label>
         </div>
-        <button class="btn btn-sm" id="clearHitsBtn">清空计数</button>
+        <button class="btn btn-sm" id="clearHitsBtn" data-i18n="mock.clearHits">清空计数</button>
         <span class="mock-stats" id="mockStats">共 0 条规则，0 条启用</span>
       </div>
     </div>
     <div class="mock-list" id="mockList">
       <div class="empty-state" id="mockEmpty">
-        <p>📋 暂无规则</p>
-        <p class="hint">点击上方按钮或从 Network 标签页导入</p>
+        <p data-i18n="mock.emptyTitle">📋 暂无规则</p>
+        <p class="hint" data-i18n="mock.emptyHint">点击上方按钮或从 Network 标签页导入</p>
       </div>
     </div>
   </div>
@@ -63,30 +64,30 @@
     <div class="toolbar">
       <div class="toolbar-left">
         <span class="badge" id="countBadge">0 个请求</span>
-        <input class="net-search" id="networkSearchInput" type="text" placeholder="过滤路径..." autocomplete="off">
+        <input class="net-search" id="networkSearchInput" type="text" placeholder="过滤路径..." data-i18n-placeholder="network.filterPath" autocomplete="off">
       </div>
       <div class="toolbar-right">
-        <button class="btn btn-sm" id="clearBtn">清空</button>
+        <button class="btn btn-sm" id="clearBtn" data-i18n="common.clear">清空</button>
       </div>
     </div>
 
     <div class="filter-bar" id="filterBar">
-      <span class="filter-chip active" data-type="all">全部</span>
+      <span class="filter-chip active" data-type="all" data-i18n="network.filterAll">全部</span>
       <span class="filter-chip" data-type="fetch">Fetch/XHR</span>
       <span class="filter-chip" data-type="js">JS</span>
       <span class="filter-chip" data-type="css">CSS</span>
-      <span class="filter-chip" data-type="image">图片</span>
-      <span class="filter-chip" data-type="font">字体</span>
-      <span class="filter-chip" data-type="document">文档</span>
-      <span class="filter-chip" data-type="other">其他</span>
+      <span class="filter-chip" data-type="image" data-i18n="network.filterImage">图片</span>
+      <span class="filter-chip" data-type="font" data-i18n="network.filterFont">字体</span>
+      <span class="filter-chip" data-type="document" data-i18n="network.filterDocument">文档</span>
+      <span class="filter-chip" data-type="other" data-i18n="network.filterOther">其他</span>
     </div>
 
     <div class="find-overlay" id="findOverlay">
-      <input class="find-overlay-input" type="text" placeholder="在页面中查找..." autocomplete="off" spellcheck="false">
+      <input class="find-overlay-input" type="text" placeholder="在页面中查找..." data-i18n-placeholder="common.searchPage" autocomplete="off" spellcheck="false">
       <span class="find-overlay-count" id="findOverlayCount">0/0</span>
-      <button class="find-overlay-btn" id="findOverlayPrev" title="上一个">▲</button>
-      <button class="find-overlay-btn" id="findOverlayNext" title="下一个">▼</button>
-      <button class="find-overlay-btn find-overlay-close" id="findOverlayClose" title="重置">重置</button>
+      <button class="find-overlay-btn" id="findOverlayPrev" title="上一个" data-i18n-title="common.prev">▲</button>
+      <button class="find-overlay-btn" id="findOverlayNext" title="下一个" data-i18n-title="common.next">▼</button>
+      <button class="find-overlay-btn find-overlay-close" id="findOverlayClose" title="重置" data-i18n-title="common.reset" data-i18n="common.reset">重置</button>
     </div>
 
 	    <div class="layout">
@@ -105,60 +106,60 @@
             <tbody id="requestBody"></tbody>
           </table>
           <div class="empty-state" id="emptyState">
-            <p>暂无捕获的请求</p>
-            <p class="hint">刷新页面即可开始捕获网络请求</p>
+            <p data-i18n="network.emptyTitle">暂无捕获的请求</p>
+            <p class="hint" data-i18n="network.emptyHint">刷新页面即可开始捕获网络请求</p>
           </div>
 	        </div>
 	      </div>
-	      <div class="panel-divider" id="panelDivider" role="separator" aria-orientation="vertical" title="拖动调整左右面板宽度"></div>
+      <div class="panel-divider" id="panelDivider" role="separator" aria-orientation="vertical" title="拖动调整左右面板宽度" data-i18n-title="network.resizeHint"></div>
 	
 	      <!-- Detail panel -->
 	      <div class="detail-panel">
         <div class="detail-empty" id="detailEmpty">
-          <p>选择左侧请求查看详情</p>
-          <p class="hint">点击 <span class="imp-btn-sample">导入</span> 可快速导入到 Replay / Mock / Cookies / Beacon</p>
+          <p data-i18n="network.selectRequest">选择左侧请求查看详情</p>
+          <p class="hint" data-i18n="network.importHint">点击 <span class="imp-btn-sample">导入</span> 可快速导入到 Replay / Mock / Cookies / Beacon</p>
         </div>
         <div class="detail-content" id="detailContent" style="display:none">
           <div class="detail-header">
-            <h3>请求详情</h3>
+            <h3 data-i18n="network.detailTitle">请求详情</h3>
             <div class="detail-header-actions">
-              <button class="btn btn-secondary btn-import-target" id="importBeaconBtn">导入 Beacon</button>
-              <button class="btn btn-secondary btn-import-target" id="importReplayBtn">导入 Replay</button>
-              <button class="btn btn-secondary btn-import-target" id="importMockBtn">导入 Mock</button>
-              <button class="btn btn-secondary btn-import-target" id="importCookiesBtn">导入 Cookies</button>
+              <button class="btn btn-secondary btn-import-target" id="importBeaconBtn" data-i18n="beacon.import">导入 Beacon</button>
+              <button class="btn btn-secondary btn-import-target" id="importReplayBtn" data-i18n="replay.import">导入 Replay</button>
+              <button class="btn btn-secondary btn-import-target" id="importMockBtn" data-i18n="mock.import">导入 Mock</button>
+              <button class="btn btn-secondary btn-import-target" id="importCookiesBtn" data-i18n="cookies.import">导入 Cookies</button>
             </div>
           </div>
           <div class="detail-section">
             <div class="detail-row detail-row-url">
-              <span class="label">URL</span>
+              <span class="label" data-i18n="common.url">URL</span>
               <div class="value url-detail-block">
                 <div class="url-detail-line mono" id="detailUrlOrigin"></div>
                 <div class="url-detail-line mono" id="detailUrlPath"></div>
                 <div class="url-detail-line mono url-detail-query" id="detailUrlQuery" title=""></div>
                 <span id="detailUrlFull" style="display:none"></span>
               </div>
-              <button class="btn btn-sm btn-secondary url-copy-btn" id="copyDetailUrlBtn">复制</button>
+              <button class="btn btn-sm btn-secondary url-copy-btn" id="copyDetailUrlBtn" data-i18n="common.copy">复制</button>
             </div>
-            <div class="detail-row"><span class="label">Method</span><span class="value" id="detailMethod"></span></div>
-            <div class="detail-row"><span class="label">Time</span><span class="value" id="detailTime"></span></div>
-            <div class="detail-row"><span class="label">Status</span><span class="value" id="detailStatus"></span></div>
-            <div class="detail-row"><span class="label">Content-Type</span><span class="value" id="detailContentType"></span></div>
+            <div class="detail-row"><span class="label" data-i18n="common.method">Method</span><span class="value" id="detailMethod"></span></div>
+            <div class="detail-row"><span class="label" data-i18n="common.time">Time</span><span class="value" id="detailTime"></span></div>
+            <div class="detail-row"><span class="label" data-i18n="common.status">Status</span><span class="value" id="detailStatus"></span></div>
+            <div class="detail-row"><span class="label" data-i18n="common.contentType">Content-Type</span><span class="value" id="detailContentType"></span></div>
           </div>
           <div class="detail-section">
-            <div class="section-title">请求 Headers</div>
+            <div class="section-title" data-i18n="network.reqHeaders">请求 Headers</div>
             <pre class="code-block" id="detailReqHeaders"></pre>
           </div>
           <div class="detail-section">
-            <div class="section-title">请求体</div>
-            <pre class="code-block" id="detailReqBody">无</pre>
+            <div class="section-title" data-i18n="network.reqBody">请求体</div>
+            <pre class="code-block" id="detailReqBody" data-i18n="common.empty">无</pre>
           </div>
           <div class="detail-section">
-            <div class="section-title">响应 Headers</div>
+            <div class="section-title" data-i18n="network.resHeaders">响应 Headers</div>
             <pre class="code-block" id="detailResHeaders"></pre>
           </div>
           <div class="detail-section">
-            <div class="section-title">响应体</div>
-            <div class="code-block response-body-panel" id="detailResBody">加载中...</div>
+            <div class="section-title" data-i18n="network.resBody">响应体</div>
+            <div class="code-block response-body-panel" id="detailResBody" data-i18n="common.loading">加载中...</div>
           </div>
         </div>
       </div>
@@ -170,54 +171,54 @@
     <div class="config-shell beacon-shell">
       <div class="config-toolbar">
         <div class="config-toolbar-left beacon-toolbar-left">
-          <input class="form-input beacon-input-lg" id="beaconPathInput" type="text" placeholder="监控路径关键字，例如 /track 或 /report">
-          <button class="btn btn-sm beacon-condition-toggle" id="toggleBeaconConditionsBtn" type="button">编辑条件</button>
-          <div class="beacon-condition-summary" id="beaconConditionSummary">未设置关注条件</div>
+          <input class="form-input beacon-input-lg" id="beaconPathInput" type="text" placeholder="监控路径关键字，例如 /track 或 /report" data-i18n-placeholder="beacon.pathPlaceholder">
+          <button class="btn btn-sm beacon-condition-toggle" id="toggleBeaconConditionsBtn" type="button" data-i18n="beacon.editConditions">编辑条件</button>
+          <div class="beacon-condition-summary" id="beaconConditionSummary" data-i18n="beacon.noConditions">未设置关注条件</div>
           <div class="beacon-conditions collapsed" id="beaconConditions"></div>
-          <button class="btn btn-sm beacon-add-condition" id="addBeaconConditionBtn" type="button">+ 添加条件</button>
+          <button class="btn btn-sm beacon-add-condition" id="addBeaconConditionBtn" type="button" data-i18n="beacon.addCondition">+ 添加条件</button>
         </div>
         <div class="config-toolbar-right">
-          <label class="toggle beacon-toggle" title="开启后会持续根据当前条件筛选命中的请求">
+          <label class="toggle beacon-toggle" title="开启后会持续根据当前条件筛选命中的请求" data-i18n-title="beacon.toggleTitle">
             <input type="checkbox" id="beaconEnabled" checked>
             <span class="toggle-slider"></span>
           </label>
-          <button class="btn btn-sm" id="clearBeaconBtn">清空命中</button>
+          <button class="btn btn-sm" id="clearBeaconBtn" data-i18n="beacon.clearHits">清空命中</button>
         </div>
       </div>
       <div class="config-layout beacon-layout">
         <aside class="config-list-panel">
           <div class="config-list" id="beaconList">
             <div class="empty-state" id="beaconEmpty">
-              <p>暂无命中的埋点请求</p>
-              <p class="hint">输入路径关键字后，会持续筛选当前捕获到的请求</p>
+              <p data-i18n="beacon.emptyTitle">暂无命中的埋点请求</p>
+              <p class="hint" data-i18n="beacon.emptyHint">输入路径关键字后，会持续筛选当前捕获到的请求</p>
             </div>
           </div>
         </aside>
         <section class="config-detail-panel beacon-detail-panel">
           <div class="detail-empty" id="beaconDetailEmpty">
-            <p>选择左侧命中项查看详情</p>
-            <p class="hint">适合盯某一路径的上报请求，再检查其中字段是否包含目标值</p>
+            <p data-i18n="beacon.selectHit">选择左侧命中项查看详情</p>
+            <p class="hint" data-i18n="beacon.selectHint">适合盯某一路径的上报请求，再检查其中字段是否包含目标值</p>
           </div>
           <div class="detail-content" id="beaconDetailContent" style="display:none">
             <div class="detail-header">
-              <h3>埋点详情</h3>
+              <h3 data-i18n="beacon.detailTitle">埋点详情</h3>
               <div class="detail-header-actions">
-                <button class="btn btn-secondary btn-sm" id="copyBeaconUrlBtn">复制 URL</button>
-                <button class="btn btn-secondary btn-sm" id="copyBeaconPayloadBtn">复制上报数据</button>
+                <button class="btn btn-secondary btn-sm" id="copyBeaconUrlBtn" data-i18n="beacon.copyUrl">复制 URL</button>
+                <button class="btn btn-secondary btn-sm" id="copyBeaconPayloadBtn" data-i18n="beacon.copyPayload">复制上报数据</button>
               </div>
             </div>
             <div class="detail-section">
-              <div class="detail-row"><span class="label">Path</span><span class="value mono" id="beaconDetailPath"></span></div>
-              <div class="detail-row"><span class="label">Method</span><span class="value" id="beaconDetailMethod"></span></div>
-              <div class="detail-row"><span class="label">Time</span><span class="value" id="beaconDetailTime"></span></div>
-              <div class="detail-row"><span class="label">字段命中</span><span class="value" id="beaconDetailField"></span></div>
+              <div class="detail-row"><span class="label" data-i18n="common.path">Path</span><span class="value mono" id="beaconDetailPath"></span></div>
+              <div class="detail-row"><span class="label" data-i18n="common.method">Method</span><span class="value" id="beaconDetailMethod"></span></div>
+              <div class="detail-row"><span class="label" data-i18n="common.time">Time</span><span class="value" id="beaconDetailTime"></span></div>
+              <div class="detail-row"><span class="label" data-i18n="beacon.fieldHit">字段命中</span><span class="value" id="beaconDetailField"></span></div>
             </div>
             <div class="detail-section">
-              <div class="section-title">关注字段值</div>
+              <div class="section-title" data-i18n="beacon.fieldValues">关注字段值</div>
               <pre class="code-block" id="beaconDetailFieldValues">无</pre>
             </div>
             <div class="detail-section">
-              <div class="section-title">解析后的上报数据</div>
+              <div class="section-title" data-i18n="beacon.parsedPayload">解析后的上报数据</div>
               <pre class="code-block beacon-payload-block" id="beaconDetailPayload">无</pre>
             </div>
           </div>
@@ -231,64 +232,60 @@
     <div class="config-shell">
       <div class="config-toolbar">
         <div class="config-toolbar-left">
-          <span class="badge" id="throttleStatusBadge">未启用弱网</span>
-          <button class="btn btn-primary" id="addThrottleBtn">+ 新建预设</button>
+          <span class="badge" id="throttleStatusBadge" data-i18n="throttle.noActive">未启用弱网</span>
+          <button class="btn btn-primary" id="addThrottleBtn" data-i18n="throttle.new">+ 新建预设</button>
         </div>
         <div class="config-toolbar-right">
-          <button class="btn btn-sm" id="clearThrottleBtn">清空</button>
+          <button class="btn btn-sm" id="clearThrottleBtn" data-i18n="common.clear">清空</button>
         </div>
       </div>
       <div class="config-layout">
         <aside class="config-list-panel">
           <div class="config-list" id="throttleList">
             <div class="empty-state" id="throttleEmpty">
-              <p>暂无弱网预设</p>
-              <p class="hint">用于 Replay 重发时模拟延迟、抖动和限速</p>
+              <p data-i18n="throttle.emptyTitle">暂无弱网预设</p>
+              <p class="hint" data-i18n="throttle.emptyHint">用于 Replay 重发时模拟延迟、抖动和限速</p>
             </div>
           </div>
         </aside>
         <section class="config-detail-panel">
           <div class="detail-empty" id="throttleDetailEmpty">
-            <p>选择左侧预设查看详情</p>
-            <p class="hint">启用后会影响 Replay 请求的发送和结果展示</p>
+            <p data-i18n="throttle.selectTitle">选择左侧预设查看详情</p>
+            <p class="hint" data-i18n="throttle.selectHint">启用后会影响 Replay 请求的发送和结果展示</p>
           </div>
           <div class="detail-content" id="throttleDetailContent" style="display:none">
             <div class="detail-header">
-              <h3>弱网配置</h3>
+              <h3 data-i18n="throttle.configTitle">弱网配置</h3>
               <div class="detail-header-actions">
-                <button class="btn btn-primary" id="applyThrottleBtn">设为当前预设</button>
-                <button class="btn btn-secondary" id="editThrottleBtn">编辑</button>
-                <button class="btn btn-danger" id="deleteThrottleBtn">删除</button>
+                <button class="btn btn-primary" id="applyThrottleBtn" data-i18n="throttle.apply">设为当前预设</button>
+                <button class="btn btn-secondary" id="editThrottleBtn" data-i18n="common.edit">编辑</button>
+                <button class="btn btn-danger" id="deleteThrottleBtn" data-i18n="common.delete">删除</button>
               </div>
             </div>
             <div class="detail-section">
-              <div class="detail-row"><span class="label">名称</span><span class="value" id="throttleDetailName"></span></div>
-              <div class="detail-row"><span class="label">延迟</span><span class="value" id="throttleDetailLatency"></span></div>
-              <div class="detail-row"><span class="label">抖动</span><span class="value" id="throttleDetailJitter"></span></div>
-              <div class="detail-row"><span class="label">下行</span><span class="value" id="throttleDetailDown"></span></div>
-              <div class="detail-row"><span class="label">上行</span><span class="value" id="throttleDetailUp"></span></div>
-              <div class="detail-row"><span class="label">作用域</span><span class="value" id="throttleDetailScopes"></span></div>
-              <div class="detail-row"><span class="label">状态</span><span class="value" id="throttleDetailStatus"></span></div>
+              <div class="detail-row"><span class="label" data-i18n="throttle.name">名称</span><span class="value" id="throttleDetailName"></span></div>
+              <div class="detail-row"><span class="label" data-i18n="throttle.latency">延迟</span><span class="value" id="throttleDetailLatency"></span></div>
+              <div class="detail-row"><span class="label" data-i18n="throttle.jitter">抖动</span><span class="value" id="throttleDetailJitter"></span></div>
+              <div class="detail-row"><span class="label" data-i18n="throttle.down">下行</span><span class="value" id="throttleDetailDown"></span></div>
+              <div class="detail-row"><span class="label" data-i18n="throttle.up">上行</span><span class="value" id="throttleDetailUp"></span></div>
+              <div class="detail-row"><span class="label" data-i18n="throttle.scope">作用域</span><span class="value" id="throttleDetailScopes"></span></div>
+              <div class="detail-row"><span class="label" data-i18n="throttle.status">状态</span><span class="value" id="throttleDetailStatus"></span></div>
             </div>
             <div class="detail-section">
-              <div class="section-title">作用域开关</div>
+              <div class="section-title" data-i18n="throttle.scopeSwitch">作用域开关</div>
               <div class="config-scope-box throttle-scope-inline">
                 <div class="config-scope-toggle">
-                  <span><strong>Replay</strong><em>仅影响 Replay 页面的重发请求</em></span>
+                  <span><strong>Replay</strong><em data-i18n="throttle.replayScopeHint">仅影响 Replay 页面的重发请求</em></span>
                   <label class="toggle"><input type="checkbox" id="throttleScopeReplay"><span class="toggle-slider"></span></label>
                 </div>
                 <div class="config-scope-toggle">
-                  <span><strong>Mock</strong><em>仅影响命中 Mock 规则的接口</em></span>
-                  <label class="toggle"><input type="checkbox" id="throttleScopeMock"><span class="toggle-slider"></span></label>
-                </div>
-                <div class="config-scope-toggle">
-                  <span><strong>页面全局</strong><em>仅影响当前页面的 fetch / XHR 接口</em></span>
+                  <span><strong data-i18n="throttle.pageScope">页面全局</strong><em data-i18n="throttle.pageScopeHint">仅影响当前页面的 fetch / XHR 接口</em></span>
                   <label class="toggle"><input type="checkbox" id="throttleScopePage"><span class="toggle-slider"></span></label>
                 </div>
               </div>
             </div>
             <div class="detail-section">
-              <div class="section-title">说明</div>
+              <div class="section-title" data-i18n="throttle.description">说明</div>
               <pre class="code-block" id="throttleDetailPreview"></pre>
             </div>
           </div>
@@ -303,41 +300,41 @@
       <aside class="cookies-list-panel">
         <div class="cookies-toolbar">
           <span class="badge" id="cookiesCountBadge">0 组 Cookies</span>
-          <button class="btn btn-sm" id="clearCookiesBtn">清空</button>
+          <button class="btn btn-sm" id="clearCookiesBtn" data-i18n="common.clear">清空</button>
         </div>
         <div class="cookies-list" id="cookiesList">
           <div class="empty-state" id="cookiesEmpty">
-            <p>暂无 Cookies</p>
-            <p class="hint">从 Network 请求详情导入后会显示在这里</p>
+            <p data-i18n="cookies.emptyTitle">暂无 Cookies</p>
+            <p class="hint" data-i18n="cookies.emptyHint">从 Network 请求详情导入后会显示在这里</p>
           </div>
         </div>
       </aside>
       <div class="cookies-detail-panel">
         <div class="detail-empty" id="cookiesDetailEmpty">
-          <p>选择左侧 Cookies 查看详情</p>
-          <p class="hint">可以单独复制请求 Cookies 或 Set-Cookie</p>
+          <p data-i18n="cookies.selectTitle">选择左侧 Cookies 查看详情</p>
+          <p class="hint" data-i18n="cookies.selectHint">可以单独复制请求 Cookies 或 Set-Cookie</p>
         </div>
         <div class="detail-content" id="cookiesDetailContent" style="display:none">
           <div class="detail-header">
-            <h3>Cookies 详情</h3>
+            <h3 data-i18n="cookies.detailTitle">Cookies 详情</h3>
             <div class="detail-header-actions">
-              <button class="btn btn-secondary btn-sm" id="copyCookiesHeaderBtn">复制 Cookies</button>
-              <button class="btn btn-secondary btn-sm" id="copyCookiesSetBtn">复制 Set-Cookie</button>
-              <button class="btn btn-secondary btn-sm" id="deleteCookiesEntryBtn">删除</button>
+              <button class="btn btn-secondary btn-sm" id="copyCookiesHeaderBtn" data-i18n="cookies.copyCookies">复制 Cookies</button>
+              <button class="btn btn-secondary btn-sm" id="copyCookiesSetBtn" data-i18n="cookies.copySetCookie">复制 Set-Cookie</button>
+              <button class="btn btn-secondary btn-sm" id="deleteCookiesEntryBtn" data-i18n="common.delete">删除</button>
             </div>
           </div>
           <div class="detail-section">
-            <div class="detail-row"><span class="label">Path</span><span class="value mono" id="cookiesDetailPath"></span></div>
-            <div class="detail-row"><span class="label">Method</span><span class="value" id="cookiesDetailMethod"></span></div>
-            <div class="detail-row"><span class="label">Time</span><span class="value" id="cookiesDetailTime"></span></div>
+            <div class="detail-row"><span class="label" data-i18n="common.path">Path</span><span class="value mono" id="cookiesDetailPath"></span></div>
+            <div class="detail-row"><span class="label" data-i18n="common.method">Method</span><span class="value" id="cookiesDetailMethod"></span></div>
+            <div class="detail-row"><span class="label" data-i18n="common.time">Time</span><span class="value" id="cookiesDetailTime"></span></div>
           </div>
           <div class="detail-section">
-            <div class="section-title">请求 Cookies</div>
-            <pre class="code-block" id="cookiesDetailReq">无</pre>
+            <div class="section-title" data-i18n="cookies.reqCookies">请求 Cookies</div>
+            <pre class="code-block" id="cookiesDetailReq" data-i18n="common.empty">无</pre>
           </div>
           <div class="detail-section">
             <div class="section-title">Set-Cookie</div>
-            <pre class="code-block" id="cookiesDetailSet">无</pre>
+            <pre class="code-block" id="cookiesDetailSet" data-i18n="common.empty">无</pre>
           </div>
         </div>
       </div>
@@ -348,76 +345,104 @@
   <div class="tab-content" id="tabReplay">
     <div class="replay-tab-shell">
       <div class="replay-tab-empty" id="replayEmpty">
-        <p>从 Network 里选择一个请求开始调试</p>
-        <p class="hint">点击请求详情右上角的“调试此请求”即可带入</p>
+        <p data-i18n="replay.emptyTitle">从 Network 里选择一个请求开始调试</p>
+        <p class="hint" data-i18n="replay.emptyHint">点击请求详情右上角的“导入 Replay”即可带入</p>
       </div>
       <div class="replay-tab-content" id="replayContent" style="display:none">
         <div class="replay-workspace">
           <aside class="replay-history-panel">
             <div class="replay-history-header">
-              <label class="mock-checkbox replay-history-checkall" title="全选/取消全选">
+              <label class="mock-checkbox replay-history-checkall" title="全选/取消全选" data-i18n-title="common.selectAll">
                 <input type="checkbox" id="replayHistoryToggleAll">
               </label>
               <div class="group-select-wrap replay-group-select-wrap">
                 <button class="group-drop-btn" id="replayGroupDropBtn" type="button">▼</button>
-                <input class="group-input" id="replayGroupInput" placeholder="搜索分组..." value="默认分组" autocomplete="off">
+                <input class="group-input" id="replayGroupInput" placeholder="搜索分组..." data-i18n-placeholder="replay.searchGroup" value="默认分组" autocomplete="off">
                 <div class="group-dropdown" id="replayGroupDropdown"></div>
               </div>
-              <button class="btn btn-text btn-sm" id="addReplayGroupBtn" type="button">+ 新建分组</button>
-              <button class="btn btn-secondary btn-sm replay-history-batch-btn" id="replayBatchDeleteBtn">删除选中</button>
+              <button class="btn btn-text btn-sm" id="addReplayGroupBtn" type="button" data-i18n="replay.newGroup">+ 新建分组</button>
+              <button class="btn btn-secondary btn-sm replay-history-batch-btn" id="replayBatchDeleteBtn" data-i18n="replay.deleteSelected">删除选中</button>
             </div>
-            <input class="replay-history-search" id="replayHistorySearchInput" type="text" placeholder="按保存名称快速检索..." autocomplete="off">
+            <input class="replay-history-search" id="replayHistorySearchInput" type="text" placeholder="按保存名称快速检索..." data-i18n-placeholder="replay.searchSaved" autocomplete="off">
             <div class="replay-history-list" id="replayHistoryList">
-              <div class="replay-history-empty">还没有保存的请求</div>
+              <div class="replay-history-empty" data-i18n="replay.noSaved">还没有保存的请求</div>
             </div>
           </aside>
-          <div class="replay-panel-divider" id="replayPanelDivider" role="separator" aria-orientation="vertical" title="拖动调整左右区域宽度"></div>
+          <div class="replay-panel-divider" id="replayPanelDivider" role="separator" aria-orientation="vertical" title="拖动调整左右区域宽度" data-i18n-title="replay.resizeHint"></div>
           <div class="replay-main-panel">
             <div class="replay-main-sticky">
               <div class="find-overlay replay-find-overlay" id="replayFindOverlay">
-                <input class="find-overlay-input" id="replayFindInput" type="text" placeholder="在页面中查找..." autocomplete="off" spellcheck="false">
+                <input class="find-overlay-input" id="replayFindInput" type="text" placeholder="在页面中查找..." data-i18n-placeholder="common.searchPage" autocomplete="off" spellcheck="false">
                 <span class="find-overlay-count" id="replayFindCount">0/0</span>
-                <button class="find-overlay-btn" id="replayFindPrev" title="上一个">▲</button>
-                <button class="find-overlay-btn" id="replayFindNext" title="下一个">▼</button>
-                <button class="find-overlay-btn find-overlay-close" id="replayFindClose" title="重置">重置</button>
+                <button class="find-overlay-btn" id="replayFindPrev" title="上一个" data-i18n-title="common.prev">▲</button>
+                <button class="find-overlay-btn" id="replayFindNext" title="下一个" data-i18n-title="common.next">▼</button>
+                <button class="find-overlay-btn find-overlay-close" id="replayFindClose" title="重置" data-i18n-title="common.reset" data-i18n="common.reset">重置</button>
               </div>
             </div>
             <div class="replay-main-scroll">
               <div class="replay-editor-card">
                 <div class="replay-grid">
-                  <div class="replay-method-wrap">
-                    <label class="form-label" for="replayMethod">Method</label>
-                    <select class="form-select" id="replayMethod">
-                      <option value="GET">GET</option>
-                      <option value="POST">POST</option>
-                      <option value="PUT">PUT</option>
-                      <option value="DELETE">DELETE</option>
-                      <option value="PATCH">PATCH</option>
-                      <option value="HEAD">HEAD</option>
-                      <option value="OPTIONS">OPTIONS</option>
-                    </select>
-                  </div>
-                  <div class="replay-url-wrap">
-                    <label class="form-label" for="replayUrl">URL</label>
-                    <input type="text" class="form-input" id="replayUrl" placeholder="http://localhost:8080/api/tasks">
-                  </div>
-                  <div class="replay-send-wrap">
-                    <button class="btn btn-primary" id="sendReplayBtn">发送请求</button>
+                  <div class="replay-input-row">
+                    <div class="replay-method-wrap">
+                      <label class="form-label" for="replayMethod">Method</label>
+                      <select class="form-select" id="replayMethod">
+                        <option value="GET">GET</option>
+                        <option value="POST">POST</option>
+                        <option value="PUT">PUT</option>
+                        <option value="DELETE">DELETE</option>
+                        <option value="PATCH">PATCH</option>
+                        <option value="HEAD">HEAD</option>
+                        <option value="OPTIONS">OPTIONS</option>
+                      </select>
+                    </div>
+                    <div class="replay-url-wrap">
+                      <div class="replay-url-head">
+                        <label class="form-label" for="replayUrl">URL</label>
+                        <div class="replay-action-wrap">
+                          <button class="btn btn-secondary" id="saveReplayBtn" data-i18n="replay.saveRequest">保存请求</button>
+                          <button class="btn btn-primary" id="sendReplayBtn" data-i18n="replay.sendRequest">发送请求</button>
+                        </div>
+                      </div>
+                      <input type="text" class="form-input" id="replayUrl" placeholder="http://localhost:8080/api/tasks">
+                    </div>
                   </div>
                 </div>
                 <div class="form-row">
-                  <label class="form-label" for="replayHeaders">请求 Headers</label>
+                  <label class="form-label" for="replayHeaders" data-i18n="replay.reqHeaders">请求 Headers</label>
                   <textarea class="form-textarea replay-textarea" id="replayHeaders" rows="6" placeholder="Content-Type: application/json&#10;Authorization: Bearer ..."></textarea>
                 </div>
                 <div class="form-row replay-body-row">
                   <div class="replay-body-head">
-                    <label class="form-label" for="replayBody">请求体</label>
+                    <label class="form-label" for="replayBody" data-i18n="replay.reqBody">请求体</label>
                     <div class="replay-body-actions">
-                      <button class="btn btn-secondary btn-sm" id="formatReplayJsonBtn">格式化 JSON</button>
-                      <button class="btn btn-secondary btn-sm" id="minifyReplayJsonBtn">压缩 JSON</button>
+                      <button class="btn btn-secondary btn-sm" id="formatReplayJsonBtn" data-i18n="replay.formatJson">格式化 JSON</button>
+                      <button class="btn btn-secondary btn-sm" id="minifyReplayJsonBtn" data-i18n="replay.minifyJson">压缩 JSON</button>
                     </div>
                   </div>
-                  <textarea class="form-textarea replay-textarea replay-body-textarea" id="replayBody" rows="8" placeholder='{"name":"demo"}'></textarea>
+                  <div class="replay-body-type-row">
+                    <label class="form-label replay-body-type-label" for="replayBodyType" data-i18n="replay.bodyType">请求体类型</label>
+                    <select class="form-select replay-body-type-select" id="replayBodyType">
+                      <option value="raw">原始 / JSON</option>
+                      <option value="urlencoded">表单 URL Encoded</option>
+                      <option value="multipart">文件上传 FormData</option>
+                    </select>
+                    <span class="replay-body-type-tip" id="replayBodyTypeTip">适合 JSON、XML、纯文本等原始请求体。</span>
+                  </div>
+                  <textarea class="form-textarea replay-textarea replay-body-textarea replay-body-panel" id="replayBody" rows="8" placeholder='{"name":"demo"}' data-replay-body-panel="raw"></textarea>
+                  <div class="replay-form-editor replay-body-panel" id="replayUrlEncodedEditor" data-replay-body-panel="urlencoded" hidden>
+                    <div class="replay-form-editor-head">
+                      <span data-i18n="replay.urlencodedHead">字段会按 application/x-www-form-urlencoded 发送</span>
+                      <button class="btn btn-secondary btn-sm" id="addReplayUrlEncodedRowBtn" type="button" data-i18n="replay.addField">+ 添加字段</button>
+                    </div>
+                    <div class="replay-form-rows" id="replayUrlEncodedRows"></div>
+                  </div>
+                  <div class="replay-form-editor replay-body-panel" id="replayMultipartEditor" data-replay-body-panel="multipart" hidden>
+                    <div class="replay-form-editor-head">
+                      <span data-i18n="replay.multipartHead">字段会按 multipart/form-data 发送，文件需要选择本地文件</span>
+                      <button class="btn btn-secondary btn-sm" id="addReplayMultipartRowBtn" type="button" data-i18n="replay.addField">+ 添加字段</button>
+                    </div>
+                    <div class="replay-form-rows" id="replayMultipartRows"></div>
+                  </div>
                 </div>
                 <div class="detail-actions replay-actions">
                   <span class="replay-status" id="replayStatus"></span>
@@ -425,18 +450,18 @@
               </div>
               <div class="replay-result-card">
                 <div class="detail-section">
-                  <div class="section-title">响应结果</div>
-                  <div class="detail-row"><span class="label">Status</span><span class="value" id="replayResultStatus">-</span></div>
-                  <div class="detail-row"><span class="label">Time</span><span class="value" id="replayResultTime">-</span></div>
-                  <div class="detail-row"><span class="label">Content-Type</span><span class="value" id="replayResultContentType">-</span></div>
+                  <div class="section-title" data-i18n="replay.responseResult">响应结果</div>
+                  <div class="detail-row"><span class="label" data-i18n="common.status">Status</span><span class="value" id="replayResultStatus">-</span></div>
+                  <div class="detail-row"><span class="label" data-i18n="common.time">Time</span><span class="value" id="replayResultTime">-</span></div>
+                  <div class="detail-row"><span class="label" data-i18n="common.contentType">Content-Type</span><span class="value" id="replayResultContentType">-</span></div>
                 </div>
                 <div class="detail-section">
-                  <div class="section-title">响应 Headers</div>
-                  <pre class="code-block" id="replayResultHeaders">(尚未发送)</pre>
+                  <div class="section-title" data-i18n="replay.responseHeaders">响应 Headers</div>
+                  <pre class="code-block" id="replayResultHeaders" data-i18n="common.notSent">(尚未发送)</pre>
                 </div>
                 <div class="detail-section">
-                  <div class="section-title">响应体</div>
-                  <pre class="code-block replay-response-body" id="replayResultBody">(尚未发送)</pre>
+                  <div class="section-title" data-i18n="replay.responseBody">响应体</div>
+                  <pre class="code-block replay-response-body" id="replayResultBody" data-i18n="common.notSent">(尚未发送)</pre>
                 </div>
               </div>
             </div>
@@ -448,29 +473,29 @@
 
   <!-- Context Menu -->
   <div id="contextMenu">
-    <div class="ctx-item"><span class="ctx-icon">✦</span> 导入到 Mock</div>
+    <div class="ctx-item"><span class="ctx-icon">✦</span> <span data-i18n="mock.importTo">导入到 Mock</span></div>
   </div>
 
   <!-- Toast -->
   <div class="toast" id="toast"></div>
   <div class="time-tooltip" id="timeTooltip" style="display:none"></div>
   <div class="import-menu floating" id="floatingImportMenu" style="display:none">
-    <button class="import-menu-item" data-import-target="replay">导入 Replay</button>
-    <button class="import-menu-item" data-import-target="mock">导入 Mock</button>
-    <button class="import-menu-item" data-import-target="cookies">导入 Cookies</button>
-    <button class="import-menu-item" data-import-target="beacon">导入 Beacon</button>
+    <button class="import-menu-item" data-import-target="replay" data-i18n="replay.import">导入 Replay</button>
+    <button class="import-menu-item" data-import-target="mock" data-i18n="mock.import">导入 Mock</button>
+    <button class="import-menu-item" data-import-target="cookies" data-i18n="cookies.import">导入 Cookies</button>
+    <button class="import-menu-item" data-import-target="beacon" data-i18n="beacon.import">导入 Beacon</button>
   </div>
 
   <div class="modal-overlay" id="configModalOverlay">
     <div class="modal config-modal">
       <div class="modal-header">
-        <h3 id="configModalTitle">新建配置</h3>
+        <h3 id="configModalTitle" data-i18n="config.new">新建配置</h3>
         <button class="btn-icon" id="configModalCloseBtn">✕</button>
       </div>
       <div class="modal-body" id="configModalBody"></div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" id="configModalCancelBtn">取消</button>
-        <button class="btn btn-primary" id="configModalSaveBtn">保存</button>
+        <button class="btn btn-secondary" id="configModalCancelBtn" data-i18n="common.cancel">取消</button>
+        <button class="btn btn-primary" id="configModalSaveBtn" data-i18n="common.save">保存</button>
       </div>
     </div>
   </div>
@@ -479,41 +504,42 @@
   <div class="modal-overlay" id="modalOverlay">
     <div class="modal">
       <div class="modal-header">
-        <h2 id="modalTitle">新建规则</h2>
+        <h2 id="modalTitle" data-i18n="mock.modalNew">新建规则</h2>
         <button class="modal-close" id="modalCloseBtn">✕</button>
       </div>
       <div class="modal-body">
         <div class="form-row">
-          <label class="form-label">规则名称</label>
-          <input type="text" class="form-input" id="ruleName" placeholder="例如：用户信息接口">
+          <label class="form-label" data-i18n="mock.ruleName">规则名称</label>
+          <input type="text" class="form-input" id="ruleName" placeholder="例如：用户信息接口" data-i18n-placeholder="mock.ruleNamePlaceholder">
         </div>
         <div class="form-row">
-          <label class="form-label">URL 路径</label>
+          <label class="form-label" data-i18n="mock.urlPath">URL 路径</label>
           <input type="text" class="form-input" id="urlPattern" placeholder="/api/user/info">
         </div>
         <div class="form-row">
-          <label class="form-label">响应体</label>
+          <label class="form-label" data-i18n="mock.responseBody">响应体</label>
           <textarea class="form-textarea" id="responseBody" rows="14" placeholder='{"data": "mock数据"}'></textarea>
           <div class="textarea-actions">
             <div class="find-bar">
-              <input type="text" class="find-input" id="findInput" placeholder="搜索...">
+              <input type="text" class="find-input" id="findInput" placeholder="搜索..." data-i18n-placeholder="common.search">
               <span class="find-result" id="findResult"></span>
-              <button class="find-btn" id="findPrevBtn" title="上一个">▲</button>
-              <button class="find-btn" id="findNextBtn" title="下一个">▼</button>
+              <button class="find-btn" id="findPrevBtn" title="上一个" data-i18n-title="common.prev">▲</button>
+              <button class="find-btn" id="findNextBtn" title="下一个" data-i18n-title="common.next">▼</button>
             </div>
-            <button class="btn btn-text" id="formatJsonBtn">格式化 JSON</button>
+            <button class="btn btn-text" id="formatJsonBtn" data-i18n="replay.formatJson">格式化 JSON</button>
           </div>
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" id="cancelModalBtn">取消</button>
-        <button class="btn btn-danger" id="deleteRuleBtn" style="display:none">删除</button>
-        <button class="btn btn-primary" id="saveRuleBtn">保存</button>
+        <button class="btn btn-secondary" id="cancelModalBtn" data-i18n="common.cancel">取消</button>
+        <button class="btn btn-danger" id="deleteRuleBtn" style="display:none" data-i18n="common.delete">删除</button>
+        <button class="btn btn-primary" id="saveRuleBtn" data-i18n="common.save">保存</button>
       </div>
     </div>
   </div>
 </div>
 
+<script src="compat.js"></script>
 <script src="devtools-panel.js"></script>
 </body>
 </html>

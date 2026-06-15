@@ -157,7 +157,12 @@
       } catch(e) {}
     }
 
-    const result = await queryRule(url, method, bodyText);
+    let result;
+    try {
+      result = await queryRule(url, method, bodyText);
+    } catch (e) {
+      return originalFetch.call(window, input, init);
+    }
     const rule = result && result.rule;
     const throttle = result && result.throttle;
     if (rule) {
@@ -181,9 +186,7 @@
     }
     try {
       await applyThrottleBeforeFetch(throttle, bodyText);
-    } catch (error) {
-      throw createThrottleFetchError(error.message);
-    }
+    } catch (error) {}
     const response = await originalFetch.call(window, input, init);
     if (throttle && throttle.downloadKbps) {
       let text;
@@ -195,9 +198,7 @@
       }
       try {
         await applyThrottleAfterFetch(throttle, text);
-      } catch (error) {
-        throw createThrottleFetchError(error.message);
-      }
+      } catch (error) {}
     }
     return response;
   };
@@ -231,7 +232,12 @@
     else if (body instanceof Document) bodyText = '';
     else if (body !== null && body !== undefined) bodyText = String(body);
 
-    const result = await queryRule(this.__url, this.__method, bodyText);
+    let result;
+    try {
+      result = await queryRule(this.__url, this.__method, bodyText);
+    } catch (e) {
+      return origSend.apply(this, arguments);
+    }
     const rule = result && result.rule;
     const throttle = result && result.throttle;
     if (rule) {
@@ -278,10 +284,7 @@
 
     try {
       await applyThrottleBeforeFetch(throttle, bodyText);
-    } catch (error) {
-      dispatchXhrError(this, error.message);
-      return;
-    }
+    } catch (error) {}
     return origSend.apply(this, arguments);
   };
 })();

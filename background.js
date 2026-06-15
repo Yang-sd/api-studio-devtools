@@ -1,3 +1,7 @@
+if (typeof ApiStudioCompat === 'undefined' && typeof importScripts === 'function') {
+  importScripts('compat.js');
+}
+
 // 扩展安装时初始化
 chrome.runtime.onInstalled.addListener(async (details) => {
   if (details.reason === 'install') {
@@ -96,23 +100,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 function storageGet(keys) {
-  return new Promise((resolve, reject) => {
-    chrome.storage.local.get(keys, result => {
-      const err = chrome.runtime.lastError;
-      if (err) reject(new Error(err.message));
-      else resolve(result || {});
-    });
-  });
+  return ApiStudioCompat.storageGet(keys);
 }
 
 function storageSet(values) {
-  return new Promise((resolve, reject) => {
-    chrome.storage.local.set(values, () => {
-      const err = chrome.runtime.lastError;
-      if (err) reject(new Error(err.message));
-      else resolve();
-    });
-  });
+  return ApiStudioCompat.storageSet(values);
 }
 
 function normalizeRules(rules) {

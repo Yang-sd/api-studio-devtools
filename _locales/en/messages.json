@@ -1,0 +1,8 @@
+{
+  "extensionName": {
+    "message": "API Studio - API Request Toolkit"
+  },
+  "extensionDescription": {
+    "message": "Capture, replay, mock, throttle, and debug API requests in DevTools."
+  }
+}

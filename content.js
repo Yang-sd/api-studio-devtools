@@ -6,6 +6,7 @@
   let cacheReady = false;
   let masterEnabled = true;
   let activeThrottleProfileId = '';
+  const extensionApi = ApiStudioCompat.api || chrome;
 
   function isAbsoluteHttpUrl(value) {
     return /^https?:\/\//i.test(String(value || ''));
@@ -80,7 +81,7 @@
 
   async function loadState() {
     try {
-      const result = await chrome.storage.local.get(['rules', 'masterEnabled', 'throttleProfiles', 'activeThrottleProfileId']);
+      const result = await ApiStudioCompat.storageGet(['rules', 'masterEnabled', 'throttleProfiles', 'activeThrottleProfileId']);
       ruleCache = result.rules || [];
       masterEnabled = result.masterEnabled !== false;
       throttleProfiles = result.throttleProfiles || [];
@@ -95,11 +96,11 @@
     }
   }
 
-  chrome.runtime.onMessage.addListener((message) => {
+  extensionApi.runtime.onMessage.addListener((message) => {
     if (message.type === '__MOCK_REFRESH_RULES__') loadState();
   });
 
-  chrome.storage.onChanged.addListener((changes) => {
+  ApiStudioCompat.addStorageChangedListener((changes) => {
     if (changes.rules) ruleCache = changes.rules.newValue || [];
     if (changes.masterEnabled !== undefined) masterEnabled = changes.masterEnabled.newValue !== false;
     if (changes.throttleProfiles) throttleProfiles = changes.throttleProfiles.newValue || [];
@@ -134,7 +135,7 @@
             responseContent: mockResponse.body || '',
             imported: false
           };
-          chrome.runtime.sendMessage({ type: 'RECORD_MOCK', data: mockEntry });
+          ApiStudioCompat.sendMessage({ type: 'RECORD_MOCK', data: mockEntry });
         } catch (e) {}
       }
       window.postMessage({
@@ -146,10 +147,10 @@
     }
   });
 
-  function getThrottleForRequest(isMocked) {
+  function getThrottleForRequest() {
     const pageThrottle = getActiveThrottleForScope('page');
     if (pageThrottle) return pageThrottle;
-    return isMocked ? getActiveThrottleForScope('mock') : null;
+    return null;
   }
 
   function getActiveThrottleForScope(scope) {
@@ -164,8 +165,7 @@
     scopes = scopes || {};
     return {
       replay: scopes.replay !== false,
-      mock: scopes.mock === true,
-      page: scopes.page === true
+      page: scopes.page !== false || scopes.mock === true
     };
   }
 
@@ -193,10 +193,10 @@
   }
 
   async function incrementHitCount(ruleId) {
-    const result = await chrome.storage.local.get('ruleHits');
+    const result = await ApiStudioCompat.storageGet('ruleHits');
     const hits = result.ruleHits || {};
     hits[ruleId] = (hits[ruleId] || 0) + 1;
-    await chrome.storage.local.set({ ruleHits: hits });
+    await ApiStudioCompat.storageSet({ ruleHits: hits });
   }
 
   function injectScript() {
@@ -204,14 +204,14 @@
       if (window.__API_STUDIO_INJECT_FALLBACK_SCHEDULED__) return;
       window.__API_STUDIO_INJECT_FALLBACK_SCHEDULED__ = true;
       const script = document.createElement('script');
-      script.src = chrome.runtime.getURL('inject.js');
+      script.src = ApiStudioCompat.getURL('inject.js');
       script.onload = function() { this.remove(); };
       (document.documentElement || document.head || document.body).appendChild(script);
     } catch (e) {
       setTimeout(function() {
         try {
           const script = document.createElement('script');
-          script.src = chrome.runtime.getURL('inject.js');
+          script.src = ApiStudioCompat.getURL('inject.js');
           script.onload = function() { this.remove(); };
           document.documentElement.appendChild(script);
         } catch (e2) {}

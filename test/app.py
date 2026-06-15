@@ -162,6 +162,56 @@ def search_tasks():
     return jsonify([dict(r) for r in rows])
 
 
+@app.route("/api/network/probe", methods=["GET", "POST"])
+def network_probe():
+    size = request.args.get("size", "256").strip()
+    try:
+        size = int(size)
+    except ValueError:
+        size = 256
+    size = min(max(size, 0), 1024 * 512)
+
+    request_body = request.get_data() or b""
+    return jsonify({
+        "ok": True,
+        "message": "network probe ok",
+        "method": request.method,
+        "server_time": datetime.now().isoformat(timespec="milliseconds"),
+        "request_bytes": len(request_body),
+        "response_bytes": size,
+        "payload": "x" * size,
+    })
+
+
+@app.route("/api/upload-demo", methods=["POST"])
+def upload_demo():
+    fields = {}
+    for key in request.form.keys():
+        values = request.form.getlist(key)
+        fields[key] = values if len(values) > 1 else values[0]
+
+    files = []
+    for field_name in request.files.keys():
+        for uploaded in request.files.getlist(field_name):
+            content = uploaded.read()
+            files.append({
+                "field": field_name,
+                "filename": uploaded.filename,
+                "content_type": uploaded.content_type,
+                "bytes": len(content),
+            })
+
+    return jsonify({
+        "ok": True,
+        "message": "upload demo ok",
+        "content_type": request.content_type,
+        "fields": fields,
+        "files": files,
+        "file_count": len(files),
+        "server_time": datetime.now().isoformat(timespec="milliseconds"),
+    })
+
+
 @app.route("/api/analytics/events", methods=["GET"])
 def list_analytics_events():
     limit = request.args.get("limit", "20").strip()
@@ -226,4 +276,4 @@ init_db()
 
 if __name__ == "__main__":
     init_db()
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=8080, debug=True)

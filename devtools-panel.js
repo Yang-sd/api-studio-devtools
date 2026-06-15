@@ -15,6 +15,7 @@
   var activeGroup = DEFAULT_GROUP;
   var replayGroups = [DEFAULT_REPLAY_GROUP];
   var activeReplayGroup = DEFAULT_REPLAY_GROUP;
+  var activeLocale = getInitialLocale();
   var replayHistorySearchText = '';
   var networkSearchText = '';
   var networkFilterType = 'all';
@@ -32,6 +33,7 @@
   var tabThrottle = $('tabThrottle');
   var tabCookies = $('tabCookies');
   var tabReplay = $('tabReplay');
+  var languageToggleBtn = $('languageToggleBtn');
 
   // Mock
   var mockList = $('mockList');
@@ -67,7 +69,15 @@
   var replayMethod = $('replayMethod');
   var replayUrl = $('replayUrl');
   var replayHeaders = $('replayHeaders');
+  var replayBodyType = $('replayBodyType');
+  var replayBodyTypeTip = $('replayBodyTypeTip');
   var replayBody = $('replayBody');
+  var replayUrlEncodedEditor = $('replayUrlEncodedEditor');
+  var replayUrlEncodedRows = $('replayUrlEncodedRows');
+  var addReplayUrlEncodedRowBtn = $('addReplayUrlEncodedRowBtn');
+  var replayMultipartEditor = $('replayMultipartEditor');
+  var replayMultipartRows = $('replayMultipartRows');
+  var addReplayMultipartRowBtn = $('addReplayMultipartRowBtn');
   var replayStatus = $('replayStatus');
   var copyCurlBtn = $('copyCurlBtn');
   var saveReplayBtn = $('saveReplayBtn');
@@ -143,7 +153,6 @@
   var throttleDetailStatus = $('throttleDetailStatus');
   var throttleDetailPreview = $('throttleDetailPreview');
   var throttleScopeReplay = $('throttleScopeReplay');
-  var throttleScopeMock = $('throttleScopeMock');
   var throttleScopePage = $('throttleScopePage');
   var applyThrottleBtn = $('applyThrottleBtn');
   var editThrottleBtn = $('editThrottleBtn');
@@ -177,6 +186,7 @@
   var replaySplitDrag = null;
   var replayRequestId = null;
   var replayHistory = [];
+  var replayBodyDrafts = createEmptyReplayBodyDrafts();
   var replayFindMatches = [];
   var replayFindIdx = -1;
   var modalFindMatches = [];
@@ -197,9 +207,625 @@
   var configModalMode = '';
   var configEditingId = '';
 
+  var I18N = {
+    zh: {
+      'lang.button': 'EN',
+      'lang.title': 'Switch to English',
+      'tab.network': '网络',
+      'tab.replay': '重放',
+      'tab.mock': 'Mock',
+      'tab.throttle': '弱网',
+      'tab.beacon': '埋点',
+      'tab.cookies': 'Cookie',
+      'status.mockOn': 'Mock 总开关已启用',
+      'status.throttleOn': '弱网预设已启用',
+      'common.clear': '清空',
+      'common.delete': '删除',
+      'common.edit': '编辑',
+      'common.copy': '复制',
+      'common.move': '转移',
+      'common.save': '保存',
+      'common.cancel': '取消',
+      'common.confirm': '确定',
+      'common.empty': '无',
+      'common.notSent': '(尚未发送)',
+      'common.loading': '加载中...',
+      'common.searchPage': '在页面中查找...',
+      'common.prev': '上一个',
+      'common.next': '下一个',
+      'common.reset': '重置',
+      'common.search': '搜索...',
+      'common.selectAll': '全选/取消全选',
+      'common.defaultGroup': '默认分组',
+      'common.url': 'URL',
+      'common.path': 'Path',
+      'common.method': 'Method',
+      'common.time': 'Time',
+      'common.status': 'Status',
+      'common.contentType': 'Content-Type',
+      'common.select': '选择',
+      'common.unnamed': '未命名',
+      'common.notSet': '(未设置)',
+      'common.emptyText': '(空)',
+      'mock.batchDelete': '🗑 批量删除',
+      'mock.batchDeleteCount': '🗑 删除 {count} 条',
+      'mock.newRule': '+ 新建规则',
+      'mock.newGroup': '+ 新建分组',
+      'mock.searchGroup': '搜索分组...',
+      'mock.masterTitle': '全局启用/禁用所有 Mock 规则',
+      'mock.on': '开启',
+      'mock.off': '关闭',
+      'mock.clearHits': '清空计数',
+      'mock.stats': '共 {rules} 条规则，{enabled} 条启用',
+      'mock.statsShort': '{rules} 条规则，{enabled} 条启用',
+      'mock.emptyTitle': '📋 暂无规则',
+      'mock.emptyHint': '点击上方按钮或从 Network 标签页导入',
+      'mock.emptyNoRules': '暂无 Mock 规则',
+      'mock.emptyGroup': '当前分组暂无规则',
+      'mock.import': '导入 Mock',
+      'mock.imported': '已导入 Mock',
+      'mock.importTo': '导入到 Mock',
+      'mock.modalNew': '新建规则',
+      'mock.modalEdit': '编辑规则',
+      'mock.deleteRuleTitle': '删除规则',
+      'mock.ruleName': '规则名称',
+      'mock.ruleNamePlaceholder': '例如：用户信息接口',
+      'mock.urlPath': 'URL 路径',
+      'mock.responseBody': '响应体',
+      'mock.unnamedRule': '未命名规则',
+      'beacon.import': '导入 Beacon',
+      'beacon.imported': '已导入 Beacon',
+      'network.count': '{count} 个请求',
+      'network.countFiltered': '{visible}/{total} 个请求',
+      'network.filterPath': '过滤路径...',
+      'network.filterAll': '全部',
+      'network.filterImage': '图片',
+      'network.filterFont': '字体',
+      'network.filterDocument': '文档',
+      'network.filterOther': '其他',
+      'network.emptyTitle': '暂无捕获的请求',
+      'network.emptyHint': '刷新页面即可开始捕获网络请求',
+      'network.emptyNoMatch': '没有匹配当前过滤条件的请求',
+      'network.selectRequest': '选择左侧请求查看详情',
+      'network.importHint': '点击“导入”可快速导入到 Replay / Mock / Cookies / Beacon',
+      'network.detailTitle': '请求详情',
+      'network.import': '导入',
+      'network.copyUrl': '复制',
+      'network.resizeHint': '拖动调整左右面板宽度',
+      'network.reqHeaders': '请求 Headers',
+      'network.reqBody': '请求体',
+      'network.resHeaders': '响应 Headers',
+      'network.resBody': '响应体',
+      'replay.import': '导入 Replay',
+      'replay.imported': '已导入 Replay',
+      'replay.emptyTitle': '从 Network 里选择一个请求开始调试',
+      'replay.emptyHint': '点击请求详情右上角的“导入 Replay”即可带入',
+      'replay.searchGroup': '搜索分组...',
+      'replay.newGroup': '+ 新建分组',
+      'replay.deleteSelected': '删除选中',
+      'replay.deleteCount': '删除 {count} 条',
+      'replay.searchSaved': '按保存名称快速检索...',
+      'replay.resizeHint': '拖动调整左右区域宽度',
+      'replay.noSaved': '还没有保存的请求',
+      'replay.noSavedInGroup': '这个分组还没有保存的请求',
+      'replay.noSavedMatched': '没有匹配的保存请求',
+      'replay.saveRequest': '保存请求',
+      'replay.sendRequest': '发送请求',
+      'replay.reqHeaders': '请求 Headers',
+      'replay.reqBody': '请求体',
+      'replay.formatJson': '格式化 JSON',
+      'replay.minifyJson': '压缩 JSON',
+      'replay.bodyType': '请求体类型',
+      'replay.bodyRaw': '原始 / JSON',
+      'replay.bodyUrlencoded': '表单 URL Encoded',
+      'replay.bodyMultipart': '文件上传 FormData',
+      'replay.tipRaw': '适合 JSON、XML、纯文本等原始请求体。',
+      'replay.tipUrlencoded': '适合普通表单提交，会按 key=value&key2=value2 发送。',
+      'replay.tipMultipart': '适合上传文件或同时提交文本字段，发送时浏览器会自动生成 multipart 边界。',
+      'replay.urlencodedHead': '字段会按 application/x-www-form-urlencoded 发送',
+      'replay.multipartHead': '字段会按 multipart/form-data 发送，文件需要选择本地文件',
+      'replay.addField': '+ 添加字段',
+      'replay.fieldName': '字段名',
+      'replay.fieldValue': '字段值',
+      'replay.text': '文本',
+      'replay.file': '文件',
+      'replay.noFile': '未选择文件',
+      'replay.fileSaved': '已保存文件名: {name}{size}，发送前需要重新选择文件。',
+      'replay.fileSelected': '已选择: {name} ({size} bytes)',
+      'replay.responseResult': '响应结果',
+      'replay.responseHeaders': '响应 Headers',
+      'replay.responseBody': '响应体',
+      'beacon.pathPlaceholder': '监控路径关键字，例如 /track 或 /report',
+      'beacon.editConditions': '编辑条件',
+      'beacon.collapseConditions': '收起条件',
+      'beacon.noConditions': '未设置关注条件',
+      'beacon.toggleTitle': '开启后会持续根据当前条件筛选命中的请求',
+      'beacon.addCondition': '+ 添加条件',
+      'beacon.clearHits': '清空命中',
+      'beacon.emptyTitle': '暂无命中的埋点请求',
+      'beacon.emptyHint': '输入路径关键字后，会持续筛选当前捕获到的请求',
+      'beacon.selectHit': '选择左侧命中项查看详情',
+      'beacon.selectHint': '适合盯某一路径的上报请求，再检查其中字段是否包含目标值',
+      'beacon.detailTitle': '埋点详情',
+      'beacon.copyUrl': '复制 URL',
+      'beacon.copyPayload': '复制上报数据',
+      'beacon.fieldHit': '字段命中',
+      'beacon.fieldValues': '关注字段值',
+      'beacon.parsedPayload': '解析后的上报数据',
+      'beacon.keyPlaceholder': '关注字段 key，可留空',
+      'beacon.valuePlaceholder': '对应 value / 关键词 / 局部 JSON',
+      'beacon.matchMode': '匹配模式',
+      'beacon.fuzzy': '模糊',
+      'beacon.exact': '精确',
+      'beacon.deleteCondition': '删除条件',
+      'beacon.deleteHit': '删除这条命中',
+      'beacon.fieldValueCount': '{count} 个字段值',
+      'beacon.conditionsHit': '{hit}/{total} 个条件命中',
+      'beacon.noWatchField': '未设置关注字段',
+      'beacon.fullText': '全文',
+      'beacon.hitTitle': '{count} 条命中',
+      'beacon.summaryQuery': 'Query {count} 项',
+      'beacon.summaryBody': 'Body {count} 项',
+      'beacon.summaryConditionHit': '条件命中 {count} 项',
+      'beacon.summaryConditionMiss': '条件未命中',
+      'beacon.summaryEmpty': '无可解析字段',
+      'throttle.noActive': '未启用弱网',
+      'throttle.active': '当前: {name} · {scopes}',
+      'throttle.new': '+ 新建预设',
+      'throttle.emptyTitle': '暂无弱网预设',
+      'throttle.emptyHint': '用于 Replay 重发时模拟延迟、抖动和限速',
+      'throttle.selectTitle': '选择左侧预设查看详情',
+      'throttle.selectHint': '启用后会影响 Replay 请求的发送和结果展示',
+      'throttle.configTitle': '弱网配置',
+      'throttle.apply': '设为当前预设',
+      'throttle.unapply': '取消当前预设',
+      'throttle.name': '名称',
+      'throttle.latency': '延迟',
+      'throttle.jitter': '抖动',
+      'throttle.down': '下行',
+      'throttle.up': '上行',
+      'throttle.scope': '作用域',
+      'throttle.status': '状态',
+      'throttle.scopeSwitch': '作用域开关',
+      'throttle.description': '说明',
+      'throttle.replayScopeHint': '仅影响 Replay 页面的重发请求',
+      'throttle.pageScope': '页面全局',
+      'throttle.pageScopeHint': '仅影响当前页面的 fetch / XHR 接口',
+      'throttle.currentUse': '当前使用',
+      'throttle.notUse': '未使用',
+      'throttle.currentEnabled': '当前启用',
+      'throttle.disabled': '未启用',
+      'config.new': '新建配置',
+      'cookies.count': '{count} 组 Cookies',
+      'cookies.emptyTitle': '暂无 Cookies',
+      'cookies.emptyHint': '从 Network 请求详情导入后会显示在这里',
+      'cookies.selectTitle': '选择左侧 Cookies 查看详情',
+      'cookies.selectHint': '可以单独复制请求 Cookies 或 Set-Cookie',
+      'cookies.detailTitle': 'Cookies 详情',
+      'cookies.copyCookies': '复制 Cookies',
+      'cookies.copySetCookie': '复制 Set-Cookie',
+      'cookies.reqCookies': '请求 Cookies',
+      'cookies.import': '导入 Cookies',
+      'cookies.imported': '已导入 Cookies'
+    },
+    en: {
+      'lang.button': '中文',
+      'lang.title': '切换到中文',
+      'tab.network': 'Network',
+      'tab.replay': 'Replay',
+      'tab.mock': 'Mock',
+      'tab.throttle': 'Throttle',
+      'tab.beacon': 'Beacon',
+      'tab.cookies': 'Cookies',
+      'status.mockOn': 'Mock master switch is enabled',
+      'status.throttleOn': 'Throttle profile is enabled',
+      'common.clear': 'Clear',
+      'common.delete': 'Delete',
+      'common.edit': 'Edit',
+      'common.copy': 'Copy',
+      'common.move': 'Move',
+      'common.save': 'Save',
+      'common.cancel': 'Cancel',
+      'common.confirm': 'OK',
+      'common.empty': 'None',
+      'common.notSent': '(Not sent yet)',
+      'common.loading': 'Loading...',
+      'common.searchPage': 'Find on page...',
+      'common.prev': 'Previous',
+      'common.next': 'Next',
+      'common.reset': 'Reset',
+      'common.search': 'Search...',
+      'common.selectAll': 'Select all / clear selection',
+      'common.defaultGroup': 'Default group',
+      'common.url': 'URL',
+      'common.path': 'Path',
+      'common.method': 'Method',
+      'common.time': 'Time',
+      'common.status': 'Status',
+      'common.contentType': 'Content-Type',
+      'common.select': 'Select',
+      'common.unnamed': 'Unnamed',
+      'common.notSet': '(Not set)',
+      'common.emptyText': '(Empty)',
+      'mock.batchDelete': '🗑 Batch delete',
+      'mock.batchDeleteCount': '🗑 Delete {count}',
+      'mock.newRule': '+ New rule',
+      'mock.newGroup': '+ New group',
+      'mock.searchGroup': 'Search groups...',
+      'mock.masterTitle': 'Enable / disable all Mock rules',
+      'mock.on': 'On',
+      'mock.off': 'Off',
+      'mock.clearHits': 'Clear hits',
+      'mock.stats': '{rules} rules, {enabled} enabled',
+      'mock.statsShort': '{rules} rules, {enabled} enabled',
+      'mock.emptyTitle': '📋 No rules yet',
+      'mock.emptyHint': 'Create a rule above or import one from Network',
+      'mock.emptyNoRules': 'No Mock rules',
+      'mock.emptyGroup': 'No rules in this group',
+      'mock.import': 'Import Mock',
+      'mock.imported': 'Mock imported',
+      'mock.importTo': 'Import to Mock',
+      'mock.modalNew': 'New rule',
+      'mock.modalEdit': 'Edit rule',
+      'mock.deleteRuleTitle': 'Delete rule',
+      'mock.ruleName': 'Rule name',
+      'mock.ruleNamePlaceholder': 'e.g. User profile API',
+      'mock.urlPath': 'URL path',
+      'mock.responseBody': 'Response body',
+      'mock.unnamedRule': 'Unnamed rule',
+      'beacon.import': 'Import Beacon',
+      'beacon.imported': 'Beacon imported',
+      'network.count': '{count} requests',
+      'network.countFiltered': '{visible}/{total} requests',
+      'network.filterPath': 'Filter path...',
+      'network.filterAll': 'All',
+      'network.filterImage': 'Images',
+      'network.filterFont': 'Fonts',
+      'network.filterDocument': 'Documents',
+      'network.filterOther': 'Other',
+      'network.emptyTitle': 'No captured requests',
+      'network.emptyHint': 'Refresh the page to start capturing network requests',
+      'network.emptyNoMatch': 'No requests match the current filter',
+      'network.selectRequest': 'Select a request on the left to view details',
+      'network.importHint': 'Click Import to send it to Replay / Mock / Cookies / Beacon',
+      'network.detailTitle': 'Request details',
+      'network.import': 'Import',
+      'network.copyUrl': 'Copy',
+      'network.resizeHint': 'Drag to resize the panels',
+      'network.reqHeaders': 'Request Headers',
+      'network.reqBody': 'Request Body',
+      'network.resHeaders': 'Response Headers',
+      'network.resBody': 'Response Body',
+      'replay.import': 'Import Replay',
+      'replay.imported': 'Replay imported',
+      'replay.emptyTitle': 'Select a request in Network to start debugging',
+      'replay.emptyHint': 'Click “Import Replay” in request details to load it here',
+      'replay.searchGroup': 'Search groups...',
+      'replay.newGroup': '+ New group',
+      'replay.deleteSelected': 'Delete selected',
+      'replay.deleteCount': 'Delete {count}',
+      'replay.searchSaved': 'Search saved requests...',
+      'replay.resizeHint': 'Drag to resize the areas',
+      'replay.noSaved': 'No saved requests yet',
+      'replay.noSavedInGroup': 'No saved requests in this group',
+      'replay.noSavedMatched': 'No saved requests matched',
+      'replay.saveRequest': 'Save request',
+      'replay.sendRequest': 'Send request',
+      'replay.reqHeaders': 'Request Headers',
+      'replay.reqBody': 'Request Body',
+      'replay.formatJson': 'Format JSON',
+      'replay.minifyJson': 'Minify JSON',
+      'replay.bodyType': 'Body type',
+      'replay.bodyRaw': 'Raw / JSON',
+      'replay.bodyUrlencoded': 'Form URL Encoded',
+      'replay.bodyMultipart': 'File Upload FormData',
+      'replay.tipRaw': 'For raw JSON, XML, or plain text bodies.',
+      'replay.tipUrlencoded': 'For classic form submissions sent as key=value&key2=value2.',
+      'replay.tipMultipart': 'For files and mixed text fields. The browser will generate the multipart boundary.',
+      'replay.urlencodedHead': 'Fields will be sent as application/x-www-form-urlencoded',
+      'replay.multipartHead': 'Fields will be sent as multipart/form-data. File fields need a local file.',
+      'replay.addField': '+ Add field',
+      'replay.fieldName': 'Field name',
+      'replay.fieldValue': 'Field value',
+      'replay.text': 'Text',
+      'replay.file': 'File',
+      'replay.noFile': 'No file selected',
+      'replay.fileSaved': 'Saved file name: {name}{size}. Please choose the file again before sending.',
+      'replay.fileSelected': 'Selected: {name} ({size} bytes)',
+      'replay.responseResult': 'Response result',
+      'replay.responseHeaders': 'Response Headers',
+      'replay.responseBody': 'Response Body',
+      'beacon.pathPlaceholder': 'Path keyword, e.g. /track or /report',
+      'beacon.editConditions': 'Edit conditions',
+      'beacon.collapseConditions': 'Collapse conditions',
+      'beacon.noConditions': 'No watch conditions',
+      'beacon.toggleTitle': 'When enabled, captured requests are continuously filtered by the current conditions',
+      'beacon.addCondition': '+ Add condition',
+      'beacon.clearHits': 'Clear hits',
+      'beacon.emptyTitle': 'No matched beacon requests',
+      'beacon.emptyHint': 'Enter a path keyword to keep filtering captured requests',
+      'beacon.selectHit': 'Select a matched item on the left',
+      'beacon.selectHint': 'Useful for watching one reporting path and checking target fields',
+      'beacon.detailTitle': 'Beacon details',
+      'beacon.copyUrl': 'Copy URL',
+      'beacon.copyPayload': 'Copy payload',
+      'beacon.fieldHit': 'Field hits',
+      'beacon.fieldValues': 'Watched field values',
+      'beacon.parsedPayload': 'Parsed payload',
+      'beacon.keyPlaceholder': 'Field key, optional',
+      'beacon.valuePlaceholder': 'Value / keyword / partial JSON',
+      'beacon.matchMode': 'Match mode',
+      'beacon.fuzzy': 'Fuzzy',
+      'beacon.exact': 'Exact',
+      'beacon.deleteCondition': 'Delete condition',
+      'beacon.deleteHit': 'Delete this hit',
+      'beacon.fieldValueCount': '{count} field values',
+      'beacon.conditionsHit': '{hit}/{total} conditions matched',
+      'beacon.noWatchField': 'No watched field',
+      'beacon.fullText': 'Full text',
+      'beacon.hitTitle': '{count} hits',
+      'beacon.summaryQuery': 'Query {count}',
+      'beacon.summaryBody': 'Body {count}',
+      'beacon.summaryConditionHit': '{count} condition hits',
+      'beacon.summaryConditionMiss': 'Condition missed',
+      'beacon.summaryEmpty': 'No parsed fields',
+      'throttle.noActive': 'Throttle disabled',
+      'throttle.active': 'Current: {name} · {scopes}',
+      'throttle.new': '+ New profile',
+      'throttle.emptyTitle': 'No throttle profiles',
+      'throttle.emptyHint': 'Simulate delay, jitter, and speed limits for Replay requests',
+      'throttle.selectTitle': 'Select a profile on the left',
+      'throttle.selectHint': 'Enabled profiles affect Replay requests and result timing',
+      'throttle.configTitle': 'Throttle config',
+      'throttle.apply': 'Set as current',
+      'throttle.unapply': 'Disable current',
+      'throttle.name': 'Name',
+      'throttle.latency': 'Latency',
+      'throttle.jitter': 'Jitter',
+      'throttle.down': 'Download',
+      'throttle.up': 'Upload',
+      'throttle.scope': 'Scope',
+      'throttle.status': 'Status',
+      'throttle.scopeSwitch': 'Scope switches',
+      'throttle.description': 'Description',
+      'throttle.replayScopeHint': 'Only affects Replay requests',
+      'throttle.pageScope': 'Page global',
+      'throttle.pageScopeHint': 'Only affects fetch / XHR requests from the current page',
+      'throttle.currentUse': 'Current',
+      'throttle.notUse': 'Inactive',
+      'throttle.currentEnabled': 'Enabled',
+      'throttle.disabled': 'Disabled',
+      'config.new': 'New config',
+      'cookies.count': '{count} cookie groups',
+      'cookies.emptyTitle': 'No Cookies',
+      'cookies.emptyHint': 'Import from Network request details to show them here',
+      'cookies.selectTitle': 'Select a Cookies entry on the left',
+      'cookies.selectHint': 'Copy request Cookies or Set-Cookie separately',
+      'cookies.detailTitle': 'Cookies details',
+      'cookies.copyCookies': 'Copy Cookies',
+      'cookies.copySetCookie': 'Copy Set-Cookie',
+      'cookies.reqCookies': 'Request Cookies',
+      'cookies.import': 'Import Cookies',
+      'cookies.imported': 'Cookies imported'
+    }
+  };
+
+  function getInitialLocale() {
+    try {
+      var saved = localStorage.getItem('apiStudioLocale');
+      if (saved === 'zh' || saved === 'en') return saved;
+    } catch (e) {}
+    var navLang = (navigator.language || '').toLowerCase();
+    return navLang.indexOf('zh') === 0 ? 'zh' : 'en';
+  }
+
+  function t(key, params) {
+    var dict = I18N[activeLocale] || I18N.zh;
+    var fallback = (I18N.zh && I18N.zh[key]) || key;
+    var value = dict[key] || fallback;
+    params = params || {};
+    return String(value).replace(/\{(\w+)\}/g, function(match, name) {
+      return params[name] !== undefined ? params[name] : match;
+    });
+  }
+
+  function tt(zhText, enText, params) {
+    var value = activeLocale === 'en' ? enText : zhText;
+    params = params || {};
+    return String(value).replace(/\{(\w+)\}/g, function(match, name) {
+      return params[name] !== undefined ? params[name] : match;
+    });
+  }
+
+  function setLocale(locale) {
+    activeLocale = locale === 'en' ? 'en' : 'zh';
+    try { localStorage.setItem('apiStudioLocale', activeLocale); } catch (e) {}
+    applyLocale();
+    rerenderLocalizedViews();
+  }
+
+  function applyLocale() {
+    document.documentElement.lang = activeLocale === 'en' ? 'en' : 'zh-CN';
+    document.title = activeLocale === 'en' ? 'API Studio DevTools' : 'API Studio 开发者工具';
+    if (languageToggleBtn) {
+      languageToggleBtn.textContent = t('lang.button');
+      languageToggleBtn.title = t('lang.title');
+    }
+    document.querySelectorAll('[data-i18n]').forEach(function(el) {
+      el.textContent = t(el.dataset.i18n);
+    });
+    document.querySelectorAll('[data-i18n-title]').forEach(function(el) {
+      el.title = t(el.dataset.i18nTitle);
+    });
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(function(el) {
+      el.placeholder = t(el.dataset.i18nPlaceholder);
+    });
+    localizeStaticControls();
+  }
+
+  function setElementText(id, key, params) {
+    var el = $(id);
+    if (el) el.textContent = t(key, params);
+  }
+
+  function setElementTitle(id, key, params) {
+    var el = $(id);
+    if (el) el.title = t(key, params);
+  }
+
+  function setElementPlaceholder(id, key, params) {
+    var el = $(id);
+    if (el) el.placeholder = t(key, params);
+  }
+
+  function setSelectorText(selector, key, params) {
+    var el = document.querySelector(selector);
+    if (el) el.textContent = t(key, params);
+  }
+
+  function setSelectorPlaceholder(selector, key, params) {
+    var el = document.querySelector(selector);
+    if (el) el.placeholder = t(key, params);
+  }
+
+  function setSectionTitles(containerSelector, keys) {
+    var titles = document.querySelectorAll(containerSelector + ' .section-title');
+    (keys || []).forEach(function(key, index) {
+      if (titles[index]) titles[index].textContent = t(key);
+    });
+  }
+
+  function setDetailLabels(containerSelector, keys) {
+    var labels = document.querySelectorAll(containerSelector + ' .detail-row .label');
+    (keys || []).forEach(function(key, index) {
+      if (labels[index]) labels[index].textContent = t(key);
+    });
+  }
+
+  function setReplayBodyTypeOption(value, key) {
+    var option = replayBodyType ? replayBodyType.querySelector('option[value="' + value + '"]') : null;
+    if (option) option.textContent = t(key);
+  }
+
+  function localizeReplayBodyTypeOptions() {
+    setReplayBodyTypeOption('raw', 'replay.bodyRaw');
+    setReplayBodyTypeOption('urlencoded', 'replay.bodyUrlencoded');
+    setReplayBodyTypeOption('multipart', 'replay.bodyMultipart');
+    if (replayBodyTypeTip) replayBodyTypeTip.textContent = replayBodyTypeTipText(getReplayBodyType());
+  }
+
+  function setFilterText(type, key) {
+    var el = filterBar ? filterBar.querySelector('[data-type="' + type + '"]') : null;
+    if (el) el.textContent = t(key);
+  }
+
+  function localizeStaticControls() {
+    setElementText('batchDeleteBtn', 'mock.batchDelete');
+    setElementText('mockAddBtn', 'mock.newRule');
+    setElementText('addGroupBtn', 'mock.newGroup');
+    setElementPlaceholder('groupInput', 'mock.searchGroup');
+    setElementText('clearHitsBtn', 'mock.clearHits');
+    setElementTitle('toggleAllCb', 'common.selectAll');
+    var toggleAllLabel = toggleAllCb ? toggleAllCb.closest('label') : null;
+    if (toggleAllLabel) toggleAllLabel.title = t('common.selectAll');
+    var masterWrap = masterToggle ? masterToggle.closest('.master-toggle') : null;
+    if (masterWrap) masterWrap.title = t('mock.masterTitle');
+    if (masterToggleText) masterToggleText.textContent = masterToggle && masterToggle.checked ? t('mock.on') : t('mock.off');
+
+    setElementText('clearBtn', 'common.clear');
+    setElementPlaceholder('networkSearchInput', 'network.filterPath');
+    setFilterText('all', 'network.filterAll');
+    setFilterText('image', 'network.filterImage');
+    setFilterText('font', 'network.filterFont');
+    setFilterText('document', 'network.filterDocument');
+    setFilterText('other', 'network.filterOther');
+    var findInputEl = document.querySelector('#findOverlay .find-overlay-input');
+    if (findInputEl) findInputEl.placeholder = t('common.searchPage');
+    setElementTitle('findOverlayPrev', 'common.prev');
+    setElementTitle('findOverlayNext', 'common.next');
+    setElementText('findOverlayClose', 'common.reset');
+    setElementTitle('panelDivider', 'network.resizeHint');
+    setElementText('importBeaconBtn', 'beacon.import');
+    setElementText('importReplayBtn', 'replay.import');
+    setElementText('importMockBtn', 'mock.import');
+    setElementText('importCookiesBtn', 'cookies.import');
+    setElementText('copyDetailUrlBtn', 'network.copyUrl');
+    setSelectorText('#detailContent .detail-header h3', 'network.detailTitle');
+
+    setElementPlaceholder('beaconPathInput', 'beacon.pathPlaceholder');
+    setElementText('addBeaconConditionBtn', 'beacon.addCondition');
+    setElementText('clearBeaconBtn', 'beacon.clearHits');
+    setElementText('copyBeaconUrlBtn', 'beacon.copyUrl');
+    setElementText('copyBeaconPayloadBtn', 'beacon.copyPayload');
+    setSelectorText('#beaconDetailContent .detail-header h3', 'beacon.detailTitle');
+
+    setElementText('addThrottleBtn', 'throttle.new');
+    setElementText('clearThrottleBtn', 'common.clear');
+    setElementText('applyThrottleBtn', selectedThrottleId === activeThrottleProfileId ? 'throttle.unapply' : 'throttle.apply');
+    setElementText('editThrottleBtn', 'common.edit');
+    setElementText('deleteThrottleBtn', 'common.delete');
+    setSelectorText('#throttleDetailContent .detail-header h3', 'throttle.configTitle');
+
+    setElementText('clearCookiesBtn', 'common.clear');
+    setElementText('copyCookiesHeaderBtn', 'cookies.copyCookies');
+    setElementText('copyCookiesSetBtn', 'cookies.copySetCookie');
+    setElementText('deleteCookiesEntryBtn', 'common.delete');
+    setSelectorText('#cookiesDetailContent .detail-header h3', 'cookies.detailTitle');
+
+    var replayHistoryCheckLabel = replayHistoryToggleAll ? replayHistoryToggleAll.closest('label') : null;
+    if (replayHistoryCheckLabel) replayHistoryCheckLabel.title = t('common.selectAll');
+    setElementPlaceholder('replayGroupInput', 'replay.searchGroup');
+    setElementText('addReplayGroupBtn', 'replay.newGroup');
+    setElementText('replayBatchDeleteBtn', 'replay.deleteSelected');
+    setElementPlaceholder('replayHistorySearchInput', 'replay.searchSaved');
+    setElementTitle('replayPanelDivider', 'replay.resizeHint');
+    setElementPlaceholder('replayFindInput', 'common.searchPage');
+    setElementTitle('replayFindPrev', 'common.prev');
+    setElementTitle('replayFindNext', 'common.next');
+    setElementText('replayFindClose', 'common.reset');
+    setElementText('saveReplayBtn', 'replay.saveRequest');
+    setElementText('sendReplayBtn', 'replay.sendRequest');
+    setElementText('formatReplayJsonBtn', 'replay.formatJson');
+    setElementText('minifyReplayJsonBtn', 'replay.minifyJson');
+    setElementText('addReplayUrlEncodedRowBtn', 'replay.addField');
+    setElementText('addReplayMultipartRowBtn', 'replay.addField');
+    localizeReplayBodyTypeOptions();
+
+    setElementText('configModalCancelBtn', 'common.cancel');
+    setElementText('configModalSaveBtn', 'common.save');
+    setElementText('cancelModalBtn', 'common.cancel');
+    setElementText('deleteRuleBtn', 'common.delete');
+    setElementText('saveRuleBtn', 'common.save');
+    setElementText('formatJsonBtn', 'replay.formatJson');
+    setElementPlaceholder('findInput', 'common.searchPage');
+    setElementTitle('findPrevBtn', 'common.prev');
+    setElementTitle('findNextBtn', 'common.next');
+  }
+
+  function rerenderLocalizedViews() {
+    renderNetworkList();
+    updateBadge();
+    if (selectedId) showDetails(selectedId);
+    renderRules();
+    renderBeaconConditionRows();
+    renderBeaconTab();
+    renderThrottleTab();
+    renderCookiesTab();
+    renderReplayBodyEditor({ forceRows: true });
+    renderReplayHistory();
+    renderReplayResult(replayRequestId ? findReq(replayRequestId) : null);
+    refreshDetailImportState();
+  }
+
   // ======================================================================
   // TAB SWITCHING
   // ======================================================================
+  if (languageToggleBtn) {
+    languageToggleBtn.addEventListener('click', function() {
+      setLocale(activeLocale === 'zh' ? 'en' : 'zh');
+    });
+  }
+
   tabNav.addEventListener('click', function(e) {
     var btn = e.target.closest('.tab');
     if (!btn) return;
@@ -381,14 +1007,14 @@
       return normalizeGroup(rule.group) === activeGroup;
     });
     var enabled = visibleRules.filter(function(r) { return r.enabled; }).length;
-    var statsText = activeGroup + '：共 ' + visibleRules.length + ' 条规则，' + enabled + ' 条启用';
-    mockStats.textContent = visibleRules.length + ' 条规则，' + enabled + ' 条启用';
+    var statsText = activeGroup + ': ' + t('mock.statsShort', { rules: visibleRules.length, enabled: enabled });
+    mockStats.textContent = t('mock.statsShort', { rules: visibleRules.length, enabled: enabled });
     mockStats.title = statsText;
     syncBatchState();
 
     if (visibleRules.length === 0) {
       mockList.appendChild(mockEmpty);
-      mockEmpty.textContent = rules.length === 0 ? '暂无 Mock 规则' : '当前分组暂无规则';
+      mockEmpty.textContent = rules.length === 0 ? t('mock.emptyNoRules') : t('mock.emptyGroup');
       return;
     }
     if (mockEmpty.parentNode) mockEmpty.remove();
@@ -402,25 +1028,25 @@
       var hits = ruleHits[rule.id] || 0;
 
       item.innerHTML =
-        '<label class="mock-select" data-stop="1" title="选择规则">' +
+        '<label class="mock-select" data-stop="1" title="' + escAttr(t('common.selectAll')) + '">' +
           '<input type="checkbox" ' + (selectedRuleIds[rule.id] ? 'checked' : '') + '>' +
         '</label>' +
         '<div class="mock-toggle" data-stop="1">' +
           '<label class="toggle"><input type="checkbox" ' + (rule.enabled ? 'checked' : '') + '><span class="toggle-slider"></span></label>' +
         '</div>' +
         '<div class="mock-info">' +
-          '<div class="mock-name">' + escHtml(rule.name || '未命名') + '</div>' +
+          '<div class="mock-name">' + escHtml(rule.name || t('common.unnamed')) + '</div>' +
           '<div class="mock-meta">' +
             '<span class="mock-method ' + m + '">' + m + '</span>' +
             '<span class="mock-url">' + escHtml(truncateUrl(urlInfo)) + '</span>' +
-            '<span class="mock-hits' + (hits > 0 ? ' active' : '') + '" title="命中次数"><span class="mock-hit-number">' + hits + '</span><span class="mock-hit-icon" aria-hidden="true">🔥</span></span>' +
+            '<span class="mock-hits' + (hits > 0 ? ' active' : '') + '" title="Hits"><span class="mock-hit-number">' + hits + '</span><span class="mock-hit-icon" aria-hidden="true">🔥</span></span>' +
           '</div>' +
         '</div>' +
         '<div class="mock-actions">' +
-          '<button class="mock-action-link" data-action="edit" data-stop="1" title="编辑">编辑</button>' +
-          '<button class="mock-action-link" data-action="copy" data-stop="1" title="复制">复制</button>' +
-          '<button class="mock-action-link" data-action="move" data-stop="1" title="转移到其他分组">转移</button>' +
-          '<button class="mock-action-link danger" data-action="delete" data-stop="1" title="删除">删除</button>' +
+          '<button class="mock-action-link" data-action="edit" data-stop="1" title="' + escAttr(t('common.edit')) + '">' + escHtml(t('common.edit')) + '</button>' +
+          '<button class="mock-action-link" data-action="copy" data-stop="1" title="' + escAttr(t('common.copy')) + '">' + escHtml(t('common.copy')) + '</button>' +
+          '<button class="mock-action-link" data-action="move" data-stop="1" title="' + escAttr(t('common.move')) + '">' + escHtml(t('common.move')) + '</button>' +
+          '<button class="mock-action-link danger" data-action="delete" data-stop="1" title="' + escAttr(t('common.delete')) + '">' + escHtml(t('common.delete')) + '</button>' +
         '</div>';
 
       // Toggle
@@ -461,7 +1087,7 @@
       // Delete button
       item.querySelector('[data-action="delete"]').addEventListener('click', async function(e) {
         e.stopPropagation();
-        if (await appConfirm('删除规则', '删除规则「' + (rule.name || '未命名') + '」？', '删除')) deleteRule(rule.id);
+        if (await appConfirm(t('mock.deleteRuleTitle'), tt('删除规则「{name}」？', 'Delete rule "{name}"?', { name: rule.name || t('common.unnamed') }), t('common.delete'))) deleteRule(rule.id);
       });
 
       mockList.appendChild(item);
@@ -543,13 +1169,13 @@
     if (!groupDropdown) return;
     var filtered = getFilteredGroups();
     if (filtered.length === 0) {
-      groupDropdown.innerHTML = '<div class="g-empty">没有匹配的分组</div>';
+      groupDropdown.innerHTML = '<div class="g-empty">' + escHtml(tt('没有匹配的分组', 'No matching groups')) + '</div>';
       return;
     }
     groupDropdown.innerHTML = filtered.map(function(group) {
       return '<div class="g-item' + (group === activeGroup ? ' active' : '') + '" data-group="' + escAttr(group) + '" title="' + escAttr(group) + '">' +
         '<span class="g-name">' + escHtml(group) + '</span>' +
-        (group === DEFAULT_GROUP ? '' : '<span class="g-actions"><button class="g-act g-act-del" data-action="delete-group" title="删除分组" type="button">删除</button></span>') +
+        (group === DEFAULT_GROUP ? '' : '<span class="g-actions"><button class="g-act g-act-del" data-action="delete-group" title="' + escAttr(tt('删除分组', 'Delete group')) + '" type="button">' + escHtml(t('common.delete')) + '</button></span>') +
       '</div>';
     }).join('');
   }
@@ -583,7 +1209,7 @@
     var next = normalizeGroup(name);
     if (!next) return;
     selectGroup(next);
-    showToast('已切换到分组：' + next);
+    showToast(tt('已切换到分组：{name}', 'Switched to group: {name}', { name: next }));
   }
 
   function isComposingEvent(e) {
@@ -596,20 +1222,20 @@
       return normalizeGroup(group) !== currentGroup;
     });
     if (targets.length === 0) {
-      showToast('暂无其他已有分组可转移', 'error');
+      showToast(tt('暂无其他已有分组可转移', 'No other existing groups to move to'), 'error');
       return;
     }
 
-    var target = await appSelect('转移分组', '选择要转移到的已有分组', targets);
+    var target = await appSelect(tt('转移分组', 'Move to group'), tt('选择要转移到的已有分组', 'Choose an existing group to move to'), targets);
     if (target === null) return;
     if (!target) {
-      showToast('没有找到这个已有分组', 'error');
+      showToast(tt('没有找到这个已有分组', 'This existing group was not found'), 'error');
       return;
     }
 
     var nextRule = Object.assign({}, rule, { group: target });
     chrome.runtime.sendMessage({ type: 'SAVE_RULE', rule: nextRule }, function() {
-      showToast('已转移到分组：' + target);
+      showToast(tt('已转移到分组：{name}', 'Moved to group: {name}', { name: target }));
       loadRules();
     });
   }
@@ -617,16 +1243,16 @@
   async function deleteGroup(name) {
     var group = normalizeGroup(name);
     if (group === DEFAULT_GROUP) {
-      showToast('默认分组不能删除', 'error');
+      showToast(tt('默认分组不能删除', 'The default group cannot be deleted'), 'error');
       return;
     }
     var ruleCount = rules.filter(function(rule) {
       return normalizeGroup(rule.group) === group;
     }).length;
     var message = ruleCount > 0
-      ? '删除分组「' + group + '」？该分组下的 ' + ruleCount + ' 条规则会移动到默认分组。'
-      : '删除分组「' + group + '」？';
-    if (!await appConfirm('删除分组', message, '删除')) return;
+      ? tt('删除分组「{name}」？该分组下的 {count} 条规则会移动到默认分组。', 'Delete group "{name}"? {count} rules in it will be moved to the default group.', { name: group, count: ruleCount })
+      : tt('删除分组「{name}」？', 'Delete group "{name}"?', { name: group });
+    if (!await appConfirm(tt('删除分组', 'Delete group'), message, t('common.delete'))) return;
 
     groups = groups.filter(function(item) {
       return normalizeGroup(item) !== group;
@@ -645,7 +1271,7 @@
       syncGroupInput();
       renderGroupDropdown();
       renderRules();
-      showToast('分组已删除');
+      showToast(tt('分组已删除', 'Group deleted'));
     });
   }
 
@@ -656,7 +1282,7 @@
     }).length;
     if (batchDeleteBtn) {
       batchDeleteBtn.classList.toggle('show', selectedCount > 0);
-      batchDeleteBtn.textContent = selectedCount > 0 ? '🗑 删除 ' + selectedCount + ' 条' : '🗑 批量删除';
+      batchDeleteBtn.textContent = selectedCount > 0 ? t('mock.batchDeleteCount', { count: selectedCount }) : t('mock.batchDelete');
     }
     if (toggleAllCb) {
       toggleAllCb.checked = visibleCount > 0 && selectedCount === visibleCount;
@@ -670,7 +1296,7 @@
     fillModal(rule);
     isEditMode = true;
     editingRule = rule;
-    modalTitle.textContent = '编辑规则';
+    modalTitle.textContent = t('mock.modalEdit');
     deleteRuleBtn.style.display = 'block';
     showModal();
   }
@@ -679,7 +1305,7 @@
     resetForm();
     isEditMode = false;
     editingRule = null;
-    modalTitle.textContent = '新建规则';
+    modalTitle.textContent = t('mock.modalNew');
     deleteRuleBtn.style.display = 'none';
     showModal();
   }
@@ -743,7 +1369,7 @@
   if (addGroupBtn) {
     addGroupBtn.addEventListener('click', async function() {
       var current = groupInput ? groupInput.value.trim() : '';
-      var name = await appPrompt('新建分组', '请输入新分组名称', current && current !== activeGroup ? current : '');
+      var name = await appPrompt(tt('新建分组', 'New group'), tt('请输入新分组名称', 'Enter a new group name'), current && current !== activeGroup ? current : '');
       if (name === null) return;
       createGroup(name);
     });
@@ -900,7 +1526,7 @@
 
   function saveRule() {
     if (!urlPattern.value.trim()) {
-      showToast('请输入 URL 路径', 'error');
+      showToast(tt('请输入 URL 路径', 'Please enter a URL path'), 'error');
       urlPattern.focus();
       return;
     }
@@ -910,7 +1536,7 @@
 
     var rule = {
       id: isEditMode ? editingRule.id : genId(),
-      name: ruleName.value.trim() || '未命名规则',
+      name: ruleName.value.trim() || t('mock.unnamedRule'),
       enabled: isEditMode ? editingRule.enabled : true,
       method: 'ANY',
       url: { pattern: toMockPathPattern(urlPattern.value), matchType: 'contains' },
@@ -929,7 +1555,7 @@
     chrome.runtime.sendMessage({ type: 'SAVE_RULE', rule: rule }, function() {
       hideModal();
       loadRules();
-      showToast('规则已保存');
+      showToast(tt('规则已保存', 'Rule saved'));
     });
   }
 
@@ -944,16 +1570,16 @@
   function duplicateRule(rule) {
     var copy = JSON.parse(JSON.stringify(rule));
     copy.id = genId();
-    copy.name = (rule.name || '未命名规则') + ' 副本';
+    copy.name = (rule.name || t('mock.unnamedRule')) + tt(' 副本', ' copy');
     copy.createdAt = Date.now();
     chrome.runtime.sendMessage({ type: 'SAVE_RULE', rule: copy }, function() {
-      showToast('已复制规则');
+      showToast(tt('已复制规则', 'Rule copied'));
       loadRules();
     });
   }
 
   deleteRuleBtn.addEventListener('click', async function() {
-    if (editingRule && await appConfirm('删除规则', '删除规则「' + editingRule.name + '」？', '删除')) deleteRule(editingRule.id);
+    if (editingRule && await appConfirm(t('mock.deleteRuleTitle'), tt('删除规则「{name}」？', 'Delete rule "{name}"?', { name: editingRule.name || t('common.unnamed') }), t('common.delete'))) deleteRule(editingRule.id);
   });
 
   if (clearHitsBtn) {
@@ -963,7 +1589,7 @@
         totalHits = 0;
         renderHitSummary();
         renderRules();
-        showToast('计数已清空');
+        showToast(tt('计数已清空', 'Hit counts cleared'));
       });
     });
   }
@@ -984,14 +1610,14 @@
     batchDeleteBtn.addEventListener('click', async function() {
       var ids = Object.keys(selectedRuleIds);
       if (ids.length === 0) return;
-      if (!await appConfirm('批量删除', '确定删除选中的 ' + ids.length + ' 条规则？', '删除')) return;
+      if (!await appConfirm(tt('批量删除', 'Batch delete'), tt('确定删除选中的 {count} 条规则？', 'Delete {count} selected rules?', { count: ids.length }), t('common.delete'))) return;
       var deleteMap = {};
       ids.forEach(function(id) { deleteMap[id] = true; });
       chrome.runtime.sendMessage({ type: 'DELETE_RULES', ruleIds: ids }, function() {
         selectedRuleIds = {};
         if (editingRule && deleteMap[editingRule.id]) hideModal();
         loadRules();
-        showToast('已删除 ' + ids.length + ' 条规则');
+        showToast(tt('已删除 {count} 条规则', 'Deleted {count} rules', { count: ids.length }));
       });
     });
   }
@@ -1000,9 +1626,9 @@
     masterToggle.addEventListener('change', function() {
       var enabled = !!this.checked;
       chrome.storage.local.set({ masterEnabled: enabled }, function() {
-        if (masterToggleText) masterToggleText.textContent = enabled ? '开启' : '关闭';
+        if (masterToggleText) masterToggleText.textContent = enabled ? t('mock.on') : t('mock.off');
         updateMockTabStatus(enabled);
-        showToast(enabled ? 'Mock 已开启' : 'Mock 已关闭');
+        showToast(enabled ? tt('Mock 已开启', 'Mock enabled') : tt('Mock 已关闭', 'Mock disabled'));
       });
     });
   }
@@ -1035,7 +1661,7 @@
     if (changes.masterEnabled) {
       var masterEnabled = changes.masterEnabled.newValue !== false;
       if (masterToggle) masterToggle.checked = masterEnabled;
-      if (masterToggleText) masterToggleText.textContent = masterEnabled ? '开启' : '关闭';
+      if (masterToggleText) masterToggleText.textContent = masterEnabled ? t('mock.on') : t('mock.off');
       updateMockTabStatus(masterEnabled);
     }
     if (changes.capturedRequests) {
@@ -1157,7 +1783,7 @@
         responseContent: item.responseContent || '',
         responseEncoding: item.responseEncoding || '',
         responseBodyState: item.responseContent ? 'text' : 'empty',
-        responseBodyMessage: item.responseContent ? '' : '(Mock 响应体为空)',
+        responseBodyMessage: item.responseContent ? '' : tt('(Mock 响应体为空)', '(Mock response body is empty)'),
         resourceType: 'fetch',
         imported: !!item.imported,
         ruleId: item.ruleId || '',
@@ -1182,14 +1808,14 @@
     emptyState.style.display = visibleRequests.length === 0 ? 'flex' : 'none';
     if (emptyState) {
       var hint = emptyState.querySelector('.hint');
-      if (hint) hint.textContent = requests.length === 0 ? '刷新页面即可开始捕获网络请求' : '没有匹配当前过滤条件的请求';
+      if (hint) hint.textContent = requests.length === 0 ? t('network.emptyHint') : t('network.emptyNoMatch');
     }
     requestBody.innerHTML = visibleRequests.map(function(r, index) {
       return '<tr class="' + (r.id === selectedId ? 'selected' : '') + '" data-id="' + r.id + '">' +
         '<td class="col-id">' + (index + 1) + '</td>' +
         '<td class="col-method"><span class="method ' + r.method.toUpperCase() + '">' + r.method + '</span></td>' +
         '<td class="col-url" title="' + escAttr(displayPath(r.url)) + '">' + escHtml(displayPathOnly(r.url)) + '</td>' +
-        '<td class="col-action"><button class="imp-btn" data-id="' + r.id + '">导入</button></td>' +
+        '<td class="col-action"><button class="imp-btn" data-id="' + r.id + '">' + escHtml(t('network.import')) + '</button></td>' +
         '</tr>';
     }).join('');
   }
@@ -1240,7 +1866,7 @@
   function updateBadge() {
     if (!countBadge) return;
     var visibleCount = filteredRequests().length;
-    countBadge.textContent = visibleCount === requests.length ? requests.length + ' 个请求' : visibleCount + '/' + requests.length + ' 个请求';
+    countBadge.textContent = visibleCount === requests.length ? t('network.count', { count: requests.length }) : t('network.countFiltered', { visible: visibleCount, total: requests.length });
   }
 
   // Network: click / right-click events
@@ -1284,14 +1910,14 @@
       var copyBtn = e.target.closest('.copy-resource-url');
       if (!copyBtn) return;
       e.preventDefault();
-      copyTextValue(copyBtn.dataset.url || '', '资源地址已复制');
+      copyTextValue(copyBtn.dataset.url || '', tt('资源地址已复制', 'Resource URL copied'));
     });
   }
 
   if (copyDetailUrlBtn) {
     copyDetailUrlBtn.addEventListener('click', function() {
       var fullUrl = (($('detailUrlFull') || {}).textContent || '').trim();
-      copyTextValue(fullUrl, '完整 URL 已复制');
+      copyTextValue(fullUrl, tt('完整 URL 已复制', 'Full URL copied'));
     });
   }
 
@@ -1355,30 +1981,32 @@
   if (deleteThrottleBtn) deleteThrottleBtn.addEventListener('click', async function() {
     if (!selectedThrottleId) return;
     var entry = throttleProfiles.find(function(item) { return item.id === selectedThrottleId; });
-    if (!entry || !await appConfirm('删除弱网预设', '删除弱网预设「' + (entry.name || '未命名预设') + '」？', '删除')) return;
+    if (!entry || !await appConfirm(tt('删除弱网预设', 'Delete throttle profile'), tt('删除弱网预设「{name}」？', 'Delete throttle profile "{name}"?', { name: entry.name || tt('未命名预设', 'Unnamed profile') }), t('common.delete'))) return;
     throttleProfiles = throttleProfiles.filter(function(item) { return item.id !== selectedThrottleId; });
     if (activeThrottleProfileId === selectedThrottleId) activeThrottleProfileId = '';
     selectedThrottleId = '';
     persistThrottleProfiles();
-    showToast('弱网预设已删除');
+    showToast(tt('弱网预设已删除', 'Throttle profile deleted'));
   });
   if (applyThrottleBtn) applyThrottleBtn.addEventListener('click', function() {
     if (!selectedThrottleId) return;
     activeThrottleProfileId = activeThrottleProfileId === selectedThrottleId ? '' : selectedThrottleId;
     persistThrottleProfiles();
-    showToast(activeThrottleProfileId ? '弱网预设已启用' : '弱网预设已关闭');
+    var entry = throttleProfiles.find(function(item) { return item.id === selectedThrottleId; });
+    var scopes = normalizeThrottleScopes(entry && entry.scopes);
+    showToast(activeThrottleProfileId ? (scopes.page ? tt('弱网预设已启用', 'Throttle profile enabled') : tt('弱网预设已启用；页面验证需打开页面全局', 'Throttle profile enabled. Enable Page global to verify page requests.')) : tt('弱网预设已关闭', 'Throttle profile disabled'));
   });
-  [throttleScopeReplay, throttleScopeMock, throttleScopePage].forEach(function(input) {
+  [throttleScopeReplay, throttleScopePage].forEach(function(input) {
     if (!input) return;
     input.addEventListener('change', updateSelectedThrottleScopes);
   });
   if (clearThrottleBtn) clearThrottleBtn.addEventListener('click', async function() {
-    if (!throttleProfiles.length || !await appConfirm('清空弱网预设', '清空所有弱网预设？', '清空')) return;
+    if (!throttleProfiles.length || !await appConfirm(tt('清空弱网预设', 'Clear throttle profiles'), tt('清空所有弱网预设？', 'Clear all throttle profiles?'), t('common.clear'))) return;
     throttleProfiles = [];
     selectedThrottleId = '';
     activeThrottleProfileId = '';
     persistThrottleProfiles();
-    showToast('弱网预设已清空');
+    showToast(tt('弱网预设已清空', 'Throttle profiles cleared'));
   });
   if (configModalCloseBtn) configModalCloseBtn.addEventListener('click', hideConfigModal);
   if (configModalCancelBtn) configModalCancelBtn.addEventListener('click', hideConfigModal);
@@ -1440,13 +2068,15 @@
   }
 
   if (beaconConditions) {
-    beaconConditions.addEventListener('input', function() {
+    var syncBeaconConditionChanges = function() {
       syncBeaconConditionsFromDom();
       selectedBeaconId = '';
       persistBeaconConfig();
       renderBeaconConditionSummary();
       renderBeaconTab();
-    });
+    };
+    beaconConditions.addEventListener('input', syncBeaconConditionChanges);
+    beaconConditions.addEventListener('change', syncBeaconConditionChanges);
     beaconConditions.addEventListener('click', function(e) {
       var btn = e.target.closest('[data-action="delete-beacon-condition"]');
       if (!btn) return;
@@ -1494,21 +2124,21 @@
       renderBeaconTab();
       updateBadge();
       chrome.storage.local.set({ capturedRequests: [] });
-      showToast('埋点命中已清空');
+      showToast(tt('埋点命中已清空', 'Beacon hits cleared'));
     });
   }
 
   if (copyBeaconUrlBtn) {
     copyBeaconUrlBtn.addEventListener('click', function() {
       var match = findBeaconMatch(selectedBeaconId);
-      copyTextValue(match ? match.req.url : '', '埋点 URL 已复制');
+      copyTextValue(match ? match.req.url : '', tt('埋点 URL 已复制', 'Beacon URL copied'));
     });
   }
 
   if (copyBeaconPayloadBtn) {
     copyBeaconPayloadBtn.addEventListener('click', function() {
       var match = findBeaconMatch(selectedBeaconId);
-      copyTextValue(match ? match.payloadText : '', '上报数据已复制');
+      copyTextValue(match ? match.payloadText : '', tt('上报数据已复制', 'Beacon payload copied'));
     });
   }
 
@@ -1526,21 +2156,21 @@
       selectedCookieEntryId = null;
       persistCookieEntries();
       renderCookiesTab();
-      showToast('Cookies 已清空');
+      showToast(tt('Cookies 已清空', 'Cookies cleared'));
     });
   }
 
   if (copyCookiesHeaderBtn) {
     copyCookiesHeaderBtn.addEventListener('click', function() {
       var entry = cookieEntries.find(function(item) { return item.id === selectedCookieEntryId; });
-      copyTextValue(formatCookieLines(entry && entry.cookies), 'Cookies 已复制');
+      copyTextValue(formatCookieLines(entry && entry.cookies), tt('Cookies 已复制', 'Cookies copied'));
     });
   }
 
   if (copyCookiesSetBtn) {
     copyCookiesSetBtn.addEventListener('click', function() {
       var entry = cookieEntries.find(function(item) { return item.id === selectedCookieEntryId; });
-      copyTextValue(formatSetCookieLines(entry && entry.setCookies), 'Set-Cookie 已复制');
+      copyTextValue(formatSetCookieLines(entry && entry.setCookies), tt('Set-Cookie 已复制', 'Set-Cookie copied'));
     });
   }
 
@@ -1551,7 +2181,7 @@
       selectedCookieEntryId = cookieEntries[0] ? cookieEntries[0].id : null;
       persistCookieEntries();
       renderCookiesTab();
-      showToast('Cookies 记录已删除');
+      showToast(tt('Cookies 记录已删除', 'Cookies entry deleted'));
     });
   }
 
@@ -1651,7 +2281,7 @@
   if (addReplayGroupBtn) {
     addReplayGroupBtn.addEventListener('click', async function() {
       var current = replayGroupInput ? replayGroupInput.value.trim() : '';
-      var name = await appPrompt('新建分组', '请输入新分组名称', current && current !== activeReplayGroup ? current : '');
+      var name = await appPrompt(tt('新建分组', 'New group'), tt('请输入新分组名称', 'Enter a new group name'), current && current !== activeReplayGroup ? current : '');
       if (name === null) return;
       createReplayGroup(name);
     });
@@ -1681,6 +2311,59 @@
   if (minifyReplayJsonBtn) {
     minifyReplayJsonBtn.addEventListener('click', function() {
       formatReplayBody('minify');
+    });
+  }
+
+  if (replayBodyType) {
+    replayBodyType.addEventListener('change', function() {
+      switchReplayBodyType(this.value);
+    });
+  }
+
+  if (addReplayUrlEncodedRowBtn) {
+    addReplayUrlEncodedRowBtn.addEventListener('click', addReplayUrlEncodedRow);
+  }
+
+  if (addReplayMultipartRowBtn) {
+    addReplayMultipartRowBtn.addEventListener('click', addReplayMultipartRow);
+  }
+
+  if (replayUrlEncodedRows) {
+    replayUrlEncodedRows.addEventListener('click', function(e) {
+      var deleteBtn = e.target.closest('[data-action="delete-urlencoded-row"]');
+      if (!deleteBtn) return;
+      var row = deleteBtn.closest('.replay-form-row');
+      if (row) row.remove();
+      if (!replayUrlEncodedRows.querySelector('.replay-form-row')) renderReplayUrlEncodedRows([{ key: '', value: '' }]);
+      syncReplayBodyDraftFromEditor();
+      reFindReplayIfNeeded();
+    });
+    replayUrlEncodedRows.addEventListener('input', function() {
+      syncReplayBodyDraftFromEditor();
+      reFindReplayIfNeeded();
+    });
+  }
+
+  if (replayMultipartRows) {
+    replayMultipartRows.addEventListener('click', function(e) {
+      var deleteBtn = e.target.closest('[data-action="delete-multipart-row"]');
+      if (!deleteBtn) return;
+      var row = deleteBtn.closest('.replay-form-row');
+      if (row) row.remove();
+      if (!replayMultipartRows.querySelector('.replay-form-row')) renderReplayMultipartRows([{ key: '', type: 'text', value: '' }]);
+      syncReplayBodyDraftFromEditor();
+      reFindReplayIfNeeded();
+    });
+    replayMultipartRows.addEventListener('input', function() {
+      syncReplayBodyDraftFromEditor();
+      reFindReplayIfNeeded();
+    });
+    replayMultipartRows.addEventListener('change', function(e) {
+      var row = e.target.closest('.replay-form-row');
+      if (e.target.matches('[data-role="fieldType"]')) updateReplayMultipartRowMode(row);
+      if (e.target.matches('[data-role="file"]')) updateReplayMultipartFileHint(row);
+      syncReplayBodyDraftFromEditor();
+      reFindReplayIfNeeded();
     });
   }
 
@@ -1735,7 +2418,7 @@
       selectedReplayHistoryIds = {};
       persistReplayHistory();
       renderReplayHistory();
-      setReplayStatus('已删除 ' + ids.length + ' 条保存请求', 'success');
+      setReplayStatus(tt('已删除 {count} 条保存请求', 'Deleted {count} saved requests', { count: ids.length }), 'success');
     });
   }
 
@@ -1756,10 +2439,16 @@
     });
   }
 
-  [replayMethod, replayUrl, replayHeaders, replayBody].forEach(function(field) {
+  [replayMethod, replayUrl, replayHeaders, replayBody, replayBodyType].forEach(function(field) {
     if (!field) return;
-    field.addEventListener('input', reFindReplayIfNeeded);
-    field.addEventListener('change', reFindReplayIfNeeded);
+    field.addEventListener('input', function() {
+      if (field === replayBody) syncReplayBodyDraftFromEditor();
+      reFindReplayIfNeeded();
+    });
+    field.addEventListener('change', function() {
+      if (field === replayBody) syncReplayBodyDraftFromEditor();
+      reFindReplayIfNeeded();
+    });
   });
 
   if (replayFindPrev) {
@@ -1871,7 +2560,7 @@
     var ct = req.resHeaders['content-type'] || req.mimeType || '-';
     setText('detailContentType', ct);
     setText('detailReqHeaders', formatHeaders(req.headers));
-    setText('detailReqBody', req.postData || '无');
+    setText('detailReqBody', req.postData || t('common.empty'));
     setText('detailResHeaders', formatHeaders(req.resHeaders));
 
     renderResponseBody(req, ct);
@@ -1897,7 +2586,7 @@
     persistCookieEntries();
     renderCookiesTab();
     refreshDetailImportState();
-    showToast('Cookies 已导入');
+    showToast(tt('Cookies 已导入', 'Cookies imported'));
   }
 
   function stageReplayRequest(req) {
@@ -1906,8 +2595,8 @@
     req.replayImported = true;
     renderReplayTab();
     refreshDetailImportState();
-    setReplayStatus('请求已导入 Replay', 'success');
-    showToast('已导入 Replay');
+    setReplayStatus(tt('请求已导入 Replay', 'Request imported to Replay'), 'success');
+    showToast(t('replay.imported'));
   }
 
   function unstageReplayRequest(req) {
@@ -1919,7 +2608,7 @@
     }
     refreshDetailImportState();
     renderNetworkList();
-    showToast('已取消导入 Replay');
+    showToast(tt('已取消导入 Replay', 'Replay import removed'));
   }
 
   function removeRequestCookies(req) {
@@ -1934,7 +2623,7 @@
     persistCookieEntries();
     renderCookiesTab();
     refreshDetailImportState();
-    if (before !== cookieEntries.length) showToast('已取消导入 Cookies');
+    if (before !== cookieEntries.length) showToast(tt('已取消导入 Cookies', 'Cookies import removed'));
   }
 
   function stageBeaconRequest(req) {
@@ -1949,7 +2638,7 @@
     persistBeaconConfig();
     renderBeaconTab();
     refreshDetailImportState();
-    showToast('已导入 Beacon');
+    showToast(t('beacon.imported'));
   }
 
   function unstageBeaconRequest(req) {
@@ -1962,7 +2651,7 @@
     persistBeaconConfig();
     renderBeaconTab();
     refreshDetailImportState();
-    showToast('已取消导入 Beacon');
+    showToast(tt('已取消导入 Beacon', 'Beacon import removed'));
   }
 
   function refreshDetailImportState() {
@@ -2009,29 +2698,29 @@
   function updateImportMenus(req) {
     var states = getImportStates(req);
     if (importReplayBtn) {
-      importReplayBtn.textContent = states.replay ? '已导入 Replay' : '导入 Replay';
+      importReplayBtn.textContent = states.replay ? t('replay.imported') : t('replay.import');
       importReplayBtn.classList.toggle('imported', states.replay);
     }
     if (importMockBtn) {
-      importMockBtn.textContent = states.mock ? '已导入 Mock' : '导入 Mock';
+      importMockBtn.textContent = states.mock ? t('mock.imported') : t('mock.import');
       importMockBtn.classList.toggle('imported', states.mock);
     }
     if (importCookiesBtn) {
-      importCookiesBtn.textContent = states.cookies ? '已导入 Cookies' : '导入 Cookies';
+      importCookiesBtn.textContent = states.cookies ? t('cookies.imported') : t('cookies.import');
       importCookiesBtn.classList.toggle('imported', states.cookies);
     }
     if (importBeaconBtn) {
-      importBeaconBtn.textContent = states.beacon ? '已导入 Beacon' : '导入 Beacon';
+      importBeaconBtn.textContent = states.beacon ? t('beacon.imported') : t('beacon.import');
       importBeaconBtn.classList.toggle('imported', states.beacon);
     }
     [floatingImportMenu].forEach(function(menu) {
       if (!menu) return;
       menu.querySelectorAll('.import-menu-item').forEach(function(item) {
         var target = item.dataset.importTarget || '';
-        if (target === 'replay') item.textContent = states.replay ? '已导入 Replay' : '导入 Replay';
-        if (target === 'mock') item.textContent = states.mock ? '已导入 Mock' : '导入 Mock';
-        if (target === 'cookies') item.textContent = states.cookies ? '已导入 Cookies' : '导入 Cookies';
-        if (target === 'beacon') item.textContent = states.beacon ? '已导入 Beacon' : '导入 Beacon';
+        if (target === 'replay') item.textContent = states.replay ? t('replay.imported') : t('replay.import');
+        if (target === 'mock') item.textContent = states.mock ? t('mock.imported') : t('mock.import');
+        if (target === 'cookies') item.textContent = states.cookies ? t('cookies.imported') : t('cookies.import');
+        if (target === 'beacon') item.textContent = states.beacon ? t('beacon.imported') : t('beacon.import');
       });
     });
   }
@@ -2045,7 +2734,7 @@
     var parts = splitUrlParts(url);
     setText('detailUrlOrigin', parts.origin || '-');
     setText('detailUrlPath', parts.path || '/');
-    setText('detailUrlQuery', parts.queryDisplay || '(无参数)');
+    setText('detailUrlQuery', parts.queryDisplay || tt('(无参数)', '(No query params)'));
     setText('detailUrlFull', url || '');
     var queryEl = $('detailUrlQuery');
     if (queryEl) queryEl.title = parts.queryFull || '';
@@ -2059,14 +2748,14 @@
         origin: u.origin,
         path: u.pathname || '/',
         queryFull: query,
-        queryDisplay: query ? truncateMiddle(query, 120) : '(无参数)'
+        queryDisplay: query ? truncateMiddle(query, 120) : tt('(无参数)', '(No query params)')
       };
     } catch (e) {
       return {
         origin: url || '-',
         path: '',
         queryFull: '',
-        queryDisplay: '(无参数)'
+        queryDisplay: tt('(无参数)', '(No query params)')
       };
     }
   }
@@ -2088,12 +2777,13 @@
     if (!req) return;
     if (replayMethod) replayMethod.value = (req.method || 'GET').toUpperCase();
     if (replayUrl) replayUrl.value = req.url || '';
-    if (replayHeaders) replayHeaders.value = buildReplayHeadersText(req);
-    if (replayBody) replayBody.value = req.postData || '';
+    var headersText = buildReplayHeadersText(req);
+    if (replayHeaders) replayHeaders.value = headersText;
+    applyReplayBodyState(req.replayBodyState || replayBodyStateFromRaw(req.postData || '', headersText));
   }
 
   function buildReplayHeadersText(req) {
-    var headerText = formatHeaders((req && req.headers) || {}).replace('(无)', '');
+    var headerText = formatHeaders((req && req.headers) || {}).replace(t('common.empty'), '').replace('(无)', '');
     if (req && req.cookies && req.cookies.length && headerText.toLowerCase().indexOf('cookie:') === -1) {
       headerText = (headerText ? headerText + '\n' : '') + 'cookie: ' + buildCookieHeader(req.cookies);
     }
@@ -2110,8 +2800,8 @@
       setText('replayResultStatus', '-');
       setText('replayResultTime', '-');
       setText('replayResultContentType', '-');
-      setText('replayResultHeaders', '(尚未发送)');
-      setText('replayResultBody', '(尚未发送)');
+      setText('replayResultHeaders', t('common.notSent'));
+      setText('replayResultBody', t('common.notSent'));
       return;
     }
     var ct = req.resHeaders['content-type'] || req.mimeType || '-';
@@ -2123,7 +2813,7 @@
     setText('replayResultTime', durationMs ? durationMs + ' ms' : '-');
     setText('replayResultContentType', ct);
     setText('replayResultHeaders', formatHeaders(req.resHeaders));
-    setText('replayResultBody', req.responseContent ? formatBody(req.responseContent, ct) : '(尚未发送)');
+    setText('replayResultBody', req.responseContent ? formatBody(req.responseContent, ct) : t('common.notSent'));
   }
 
   function renderReplayTab() {
@@ -2144,7 +2834,7 @@
         if (replayMethod) replayMethod.value = firstHistory.method || 'GET';
         if (replayUrl) replayUrl.value = firstHistory.url || '';
         if (replayHeaders) replayHeaders.value = firstHistory.headersText || '';
-        if (replayBody) replayBody.value = firstHistory.body || '';
+        applyReplayBodyState(getReplayHistoryBodyState(firstHistory));
         setText('replaySourceText', (firstHistory.method || 'GET') + ' ' + displayPath(firstHistory.url || ''));
       } else {
         setText('replaySourceText', activeReplayGroup || DEFAULT_REPLAY_GROUP);
@@ -2192,16 +2882,16 @@
     var active = getActiveThrottleProfileForScope('replay');
     if (!active) return;
     if (!replayStatus || replayStatus.textContent) return;
-    setReplayStatus('当前弱网预设: ' + throttleSummaryText(active));
+    setReplayStatus(tt('当前弱网预设: {summary}', 'Current throttle profile: {summary}', { summary: throttleSummaryText(active) }));
   }
 
   function throttleSummaryText(profile) {
     if (!profile) return '';
-    return (profile.name || '未命名预设') +
-      ' · 延迟 ' + (profile.latency || 0) + ' ms' +
+    return (profile.name || tt('未命名预设', 'Unnamed profile')) +
+      ' · ' + t('throttle.latency') + ' ' + (profile.latency || 0) + ' ms' +
       ((profile.jitterMs || 0) ? '±' + profile.jitterMs + ' ms' : '') +
-      ' · 下行 ' + (profile.downloadKbps || 0) + ' kbps' +
-      ' · 上行 ' + (profile.uploadKbps || 0) + ' kbps';
+      ' · ' + t('throttle.down') + ' ' + (profile.downloadKbps || 0) + ' kbps' +
+      ' · ' + t('throttle.up') + ' ' + (profile.uploadKbps || 0) + ' kbps';
   }
 
   function applyThrottleBeforeFetch(profile, body) {
@@ -2239,6 +2929,15 @@
     if (payload instanceof Blob) return payload.size || 0;
     if (payload instanceof ArrayBuffer) return payload.byteLength || 0;
     if (payload instanceof URLSearchParams) return payload.toString().length;
+    if (typeof FormData !== 'undefined' && payload instanceof FormData) {
+      var total = 0;
+      payload.forEach(function(value, key) {
+        total += String(key || '').length;
+        if (value instanceof Blob) total += value.size || 0;
+        else total += String(value || '').length;
+      });
+      return total;
+    }
     return String(payload).length;
   }
 
@@ -2256,18 +2955,536 @@
     return headerObj;
   }
 
+  function createEmptyReplayBodyDrafts() {
+    return {
+      raw: '',
+      urlencoded: [],
+      multipart: []
+    };
+  }
+
+  function normalizeReplayBodyType(type) {
+    return type === 'urlencoded' || type === 'multipart' ? type : 'raw';
+  }
+
+  function getReplayBodyType() {
+    return normalizeReplayBodyType(replayBodyType ? replayBodyType.value : 'raw');
+  }
+
+  function replayBodyTypeTipText(type) {
+    if (type === 'urlencoded') return t('replay.tipUrlencoded');
+    if (type === 'multipart') return t('replay.tipMultipart');
+    return t('replay.tipRaw');
+  }
+
+  function syncReplayBodyDraftFromEditor() {
+    if (!replayBodyDrafts) replayBodyDrafts = createEmptyReplayBodyDrafts();
+    var type = getReplayBodyType();
+    if (type === 'raw') {
+      replayBodyDrafts.raw = replayBody ? replayBody.value : '';
+      return;
+    }
+    if (type === 'urlencoded') {
+      replayBodyDrafts.urlencoded = readReplayUrlEncodedRows();
+      return;
+    }
+    replayBodyDrafts.multipart = readReplayMultipartRows({ includeFiles: true });
+  }
+
+  function switchReplayBodyType(type) {
+    syncReplayBodyDraftFromEditor();
+    type = normalizeReplayBodyType(type);
+    if (replayBodyType) replayBodyType.value = type;
+    if (type === 'urlencoded' && replayBodyDrafts.urlencoded.length === 0) {
+      replayBodyDrafts.urlencoded = parseUrlEncodedRows(replayBodyDrafts.raw || '');
+    }
+    if (type === 'multipart' && replayBodyDrafts.multipart.length === 0) {
+      replayBodyDrafts.multipart = parseMultipartRowsFromRaw(replayBodyDrafts.raw || '', replayHeaders ? replayHeaders.value : '');
+    }
+    renderReplayBodyEditor();
+    reFindReplayIfNeeded();
+  }
+
+  function renderReplayBodyEditor(options) {
+    options = options || {};
+    var type = getReplayBodyType();
+    if (!replayBodyDrafts) replayBodyDrafts = createEmptyReplayBodyDrafts();
+    if (replayBodyType && replayBodyType.value !== type) replayBodyType.value = type;
+    if (replayBodyTypeTip) replayBodyTypeTip.textContent = replayBodyTypeTipText(type);
+    if (replayBody) {
+      replayBody.hidden = type !== 'raw';
+      if (type === 'raw') replayBody.value = replayBodyDrafts.raw || '';
+    }
+    if (replayUrlEncodedEditor) replayUrlEncodedEditor.hidden = type !== 'urlencoded';
+    if (replayMultipartEditor) replayMultipartEditor.hidden = type !== 'multipart';
+    if (type === 'urlencoded' && (options.forceRows || !replayUrlEncodedRows || !replayUrlEncodedRows.querySelector('.replay-form-row'))) renderReplayUrlEncodedRows(replayBodyDrafts.urlencoded || []);
+    if (type === 'multipart' && (options.forceRows || !replayMultipartRows || !replayMultipartRows.querySelector('.replay-form-row'))) renderReplayMultipartRows(replayBodyDrafts.multipart || []);
+    if (formatReplayJsonBtn) formatReplayJsonBtn.disabled = type !== 'raw';
+    if (minifyReplayJsonBtn) minifyReplayJsonBtn.disabled = type !== 'raw';
+  }
+
+  function applyReplayBodyState(state) {
+    var normalized = normalizeReplayBodyState(state);
+    replayBodyDrafts = createEmptyReplayBodyDrafts();
+    replayBodyDrafts.raw = normalized.raw || '';
+    if (normalized.type === 'urlencoded') replayBodyDrafts.urlencoded = normalized.fields.slice();
+    if (normalized.type === 'multipart') replayBodyDrafts.multipart = normalized.fields.slice();
+    if (replayBodyType) replayBodyType.value = normalized.type;
+    renderReplayBodyEditor({ forceRows: true });
+  }
+
+  function captureReplayBodyState(options) {
+    options = options || {};
+    syncReplayBodyDraftFromEditor();
+    var type = getReplayBodyType();
+    if (type === 'urlencoded') {
+      return normalizeReplayBodyState({
+        type: 'urlencoded',
+        raw: replayBodyStateToText({ type: 'urlencoded', fields: replayBodyDrafts.urlencoded || [] }),
+        fields: replayBodyDrafts.urlencoded || []
+      });
+    }
+    if (type === 'multipart') {
+      return normalizeReplayBodyState({
+        type: 'multipart',
+        raw: replayBodyStateToText({ type: 'multipart', fields: replayBodyDrafts.multipart || [] }),
+        fields: readReplayMultipartRows({ includeFiles: !!options.includeFiles })
+      });
+    }
+    return normalizeReplayBodyState({ type: 'raw', raw: replayBodyDrafts.raw || '' });
+  }
+
+  function normalizeReplayBodyState(state) {
+    if (typeof state === 'string') return { type: 'raw', raw: state, fields: [] };
+    state = state || {};
+    var type = normalizeReplayBodyType(state.type || state.bodyType);
+    var raw = state.raw !== undefined ? String(state.raw || '') : String(state.body || '');
+    var fields = state.fields || state.bodyFields || [];
+    if (type === 'urlencoded') {
+      fields = normalizeReplayUrlEncodedRows(fields);
+      if (!fields.length && raw) fields = parseUrlEncodedRows(raw);
+      raw = fields.length ? replayBodyStateToText({ type: 'urlencoded', fields: fields }) : raw;
+    } else if (type === 'multipart') {
+      fields = normalizeReplayMultipartRows(fields);
+      if (!fields.length && raw) fields = parseMultipartRowsFromRaw(raw, replayHeaders ? replayHeaders.value : '');
+      raw = fields.length ? replayBodyStateToText({ type: 'multipart', fields: fields }) : raw;
+    } else {
+      type = 'raw';
+      fields = [];
+    }
+    return { type: type, raw: raw, fields: fields };
+  }
+
+  function replayBodyStateFromRaw(raw, headersText) {
+    raw = String(raw || '');
+    var headers = parseHeadersText(headersText || '');
+    var contentType = String(getHeaderCaseInsensitive(headers, 'content-type') || '').toLowerCase();
+    if (contentType.indexOf('x-www-form-urlencoded') !== -1) {
+      return normalizeReplayBodyState({ type: 'urlencoded', raw: raw, fields: parseUrlEncodedRows(raw) });
+    }
+    if (contentType.indexOf('multipart/form-data') !== -1) {
+      return normalizeReplayBodyState({ type: 'multipart', raw: raw, fields: parseMultipartRowsFromRaw(raw, headersText || '') });
+    }
+    return normalizeReplayBodyState({ type: 'raw', raw: raw });
+  }
+
+  function getReplayHistoryBodyState(item) {
+    item = item || {};
+    var fields = item.bodyFields || [];
+    var type = normalizeReplayBodyType(item.bodyType || 'raw');
+    if (type === 'raw' && item.headersText) {
+      var inferred = replayBodyStateFromRaw(item.body || '', item.headersText || '');
+      type = inferred.type;
+      fields = inferred.fields;
+    }
+    if (type === 'urlencoded' && !fields.length && item.body) fields = parseUrlEncodedRows(item.body);
+    if (type === 'multipart' && !fields.length && item.body) fields = parseMultipartRowsFromRaw(item.body, item.headersText || '');
+    return normalizeReplayBodyState({
+      type: type,
+      raw: item.body || '',
+      fields: fields
+    });
+  }
+
+  function serializeReplayBodyState(state) {
+    var normalized = normalizeReplayBodyState(state);
+    return {
+      type: normalized.type,
+      raw: replayBodyStateToText(normalized),
+      fields: normalized.fields.map(function(item) {
+        if (normalized.type === 'multipart') {
+          return {
+            key: item.key || '',
+            type: item.type === 'file' ? 'file' : 'text',
+            value: item.type === 'file' ? '' : String(item.value || ''),
+            fileName: replayMultipartFileName(item),
+            fileSize: replayMultipartFileSize(item)
+          };
+        }
+        return { key: item.key || '', value: String(item.value || '') };
+      })
+    };
+  }
+
+  function replayBodySignature(state) {
+    var serialized = serializeReplayBodyState(state);
+    return JSON.stringify(serialized);
+  }
+
+  function replayBodyStateToText(state) {
+    state = state || {};
+    var type = normalizeReplayBodyType(state.type || state.bodyType);
+    var raw = state.raw !== undefined ? String(state.raw || '') : String(state.body || '');
+    var fields = state.fields || state.bodyFields || [];
+    if (type === 'urlencoded') {
+      var urlencodedRows = normalizeReplayUrlEncodedRows(fields);
+      if (!urlencodedRows.length) return raw;
+      var params = new URLSearchParams();
+      urlencodedRows.forEach(function(item) {
+        if (!item.key) return;
+        params.append(item.key, item.value || '');
+      });
+      return params.toString();
+    }
+    if (type === 'multipart') {
+      var multipartRows = normalizeReplayMultipartRows(fields);
+      if (!multipartRows.length) return raw;
+      return multipartRows.filter(function(item) {
+        return item.key || item.value || replayMultipartFileName(item);
+      }).map(function(item) {
+        if (item.type === 'file') return (item.key || tt('(未命名字段)', '(Unnamed field)')) + '=@' + (replayMultipartFileName(item) || tt('(未选择文件)', '(No file selected)'));
+        return (item.key || tt('(未命名字段)', '(Unnamed field)')) + '=' + String(item.value || '');
+      }).join('\n');
+    }
+    return raw;
+  }
+
+  function readReplayUrlEncodedRows() {
+    if (!replayUrlEncodedRows) return [];
+    var rows = [];
+    replayUrlEncodedRows.querySelectorAll('.replay-form-row').forEach(function(row) {
+      var keyInput = row.querySelector('[data-role="key"]');
+      var valueInput = row.querySelector('[data-role="value"]');
+      var key = keyInput ? keyInput.value.trim() : '';
+      var value = valueInput ? valueInput.value : '';
+      if (!key && !value) return;
+      rows.push({ key: key, value: value });
+    });
+    return normalizeReplayUrlEncodedRows(rows);
+  }
+
+  function readReplayMultipartRows(options) {
+    options = options || {};
+    if (!replayMultipartRows) return [];
+    var rows = [];
+    replayMultipartRows.querySelectorAll('.replay-form-row').forEach(function(row) {
+      var keyInput = row.querySelector('[data-role="key"]');
+      var typeSelect = row.querySelector('[data-role="fieldType"]');
+      var valueInput = row.querySelector('[data-role="value"]');
+      var fileInput = row.querySelector('[data-role="file"]');
+      var key = keyInput ? keyInput.value.trim() : '';
+      var type = typeSelect && typeSelect.value === 'file' ? 'file' : 'text';
+      var file = fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+      var fileName = file ? file.name : (row.dataset.fileName || '');
+      var fileSize = file ? file.size : (row.dataset.fileSize || '');
+      var value = valueInput ? valueInput.value : '';
+      if (!key && !value && !fileName && !file) return;
+      var item = { key: key, type: type, value: type === 'text' ? value : '', fileName: fileName, fileSize: fileSize };
+      if (options.includeFiles && file) item.file = file;
+      rows.push(item);
+    });
+    return normalizeReplayMultipartRows(rows);
+  }
+
+  function normalizeReplayUrlEncodedRows(rows) {
+    return (rows || []).map(function(item) {
+      item = item || {};
+      return {
+        key: String(item.key || '').trim(),
+        value: String(item.value || '')
+      };
+    }).filter(function(item) {
+      return item.key || item.value;
+    });
+  }
+
+  function normalizeReplayMultipartRows(rows) {
+    return (rows || []).map(function(item) {
+      item = item || {};
+      var file = item.file || null;
+      return {
+        key: String(item.key || '').trim(),
+        type: item.type === 'file' ? 'file' : 'text',
+        value: item.type === 'file' ? '' : String(item.value || ''),
+        fileName: file ? file.name : String(item.fileName || ''),
+        fileSize: file ? file.size : (item.fileSize || ''),
+        file: file
+      };
+    }).filter(function(item) {
+      return item.key || item.value || replayMultipartFileName(item);
+    });
+  }
+
+  function parseUrlEncodedRows(raw) {
+    raw = String(raw || '').trim();
+    if (!raw || raw.indexOf('=') === -1) return [];
+    var rows = [];
+    try {
+      var params = new URLSearchParams(raw);
+      params.forEach(function(value, key) {
+        rows.push({ key: key, value: value });
+      });
+    } catch (e) {
+      raw.split('&').forEach(function(pair) {
+        if (!pair) return;
+        var idx = pair.indexOf('=');
+        var key = idx >= 0 ? pair.slice(0, idx) : pair;
+        var value = idx >= 0 ? pair.slice(idx + 1) : '';
+        try { key = decodeURIComponent(key.replace(/\+/g, ' ')); } catch (err) {}
+        try { value = decodeURIComponent(value.replace(/\+/g, ' ')); } catch (err2) {}
+        rows.push({ key: key, value: value });
+      });
+    }
+    return normalizeReplayUrlEncodedRows(rows);
+  }
+
+  function parseMultipartRowsFromRaw(raw, headersText) {
+    raw = String(raw || '');
+    if (!raw) return [];
+    var headers = parseHeadersText(headersText || '');
+    var contentType = String(getHeaderCaseInsensitive(headers, 'content-type') || '');
+    var boundaryMatch = contentType.match(/boundary=(?:(?:"([^"]+)")|([^;]+))/i);
+    if (!boundaryMatch) return [];
+    var boundary = (boundaryMatch[1] || boundaryMatch[2] || '').trim();
+    if (!boundary) return [];
+    var rows = [];
+    raw.split('--' + boundary).forEach(function(part) {
+      part = part.replace(/^\r?\n/, '').replace(/\r?\n$/, '');
+      if (!part || part === '--') return;
+      var separator = part.indexOf('\r\n\r\n');
+      var separatorLength = 4;
+      if (separator === -1) {
+        separator = part.indexOf('\n\n');
+        separatorLength = 2;
+      }
+      if (separator === -1) return;
+      var headerText = part.slice(0, separator);
+      var body = part.slice(separator + separatorLength).replace(/\r?\n$/, '');
+      var dispositionLine = headerText.split(/\r?\n/).find(function(line) {
+        return /^content-disposition:/i.test(line);
+      }) || '';
+      var nameMatch = dispositionLine.match(/name="([^"]*)"/i);
+      var fileMatch = dispositionLine.match(/filename="([^"]*)"/i);
+      var key = nameMatch ? nameMatch[1] : '';
+      if (!key) return;
+      if (fileMatch) rows.push({ key: key, type: 'file', fileName: fileMatch[1] || '' });
+      else rows.push({ key: key, type: 'text', value: body });
+    });
+    return normalizeReplayMultipartRows(rows);
+  }
+
+  function renderReplayUrlEncodedRows(rows) {
+    if (!replayUrlEncodedRows) return;
+    rows = normalizeReplayUrlEncodedRows(rows);
+    if (!rows.length) rows = [{ key: '', value: '' }];
+    replayUrlEncodedRows.innerHTML = rows.map(function(item, index) {
+      return '<div class="replay-form-row" data-row-index="' + index + '">' +
+        '<input class="form-input" data-role="key" type="text" placeholder="' + escAttr(t('replay.fieldName')) + '" value="' + escAttr(item.key || '') + '">' +
+        '<input class="form-input" data-role="value" type="text" placeholder="' + escAttr(t('replay.fieldValue')) + '" value="' + escAttr(item.value || '') + '">' +
+        '<button class="btn btn-secondary btn-sm replay-form-delete" data-action="delete-urlencoded-row" type="button">' + escHtml(t('common.delete')) + '</button>' +
+      '</div>';
+    }).join('');
+  }
+
+  function renderReplayMultipartRows(rows) {
+    if (!replayMultipartRows) return;
+    rows = normalizeReplayMultipartRows(rows);
+    if (!rows.length) rows = [{ key: '', type: 'text', value: '' }];
+    replayMultipartRows.innerHTML = rows.map(function(item, index) {
+      var type = item.type === 'file' ? 'file' : 'text';
+      var fileName = replayMultipartFileName(item);
+      var fileSize = replayMultipartFileSize(item);
+      var fileHint = fileName ? t('replay.fileSaved', { name: fileName, size: fileSize ? ' (' + fileSize + ' bytes)' : '' }) : t('replay.noFile');
+      return '<div class="replay-form-row multipart" data-row-index="' + index + '" data-file-name="' + escAttr(fileName) + '" data-file-size="' + escAttr(fileSize) + '">' +
+        '<input class="form-input" data-role="key" type="text" placeholder="' + escAttr(t('replay.fieldName')) + '" value="' + escAttr(item.key || '') + '">' +
+        '<select class="form-select" data-role="fieldType">' +
+          '<option value="text"' + (type === 'text' ? ' selected' : '') + '>' + escHtml(t('replay.text')) + '</option>' +
+          '<option value="file"' + (type === 'file' ? ' selected' : '') + '>' + escHtml(t('replay.file')) + '</option>' +
+        '</select>' +
+        '<div class="replay-form-file-wrap">' +
+          '<input class="form-input" data-role="value" type="text" placeholder="' + escAttr(t('replay.fieldValue')) + '" value="' + escAttr(type === 'text' ? (item.value || '') : '') + '"' + (type === 'file' ? ' hidden' : '') + '>' +
+          '<div data-role="fileWrap"' + (type === 'file' ? '' : ' hidden') + '>' +
+            '<input class="replay-form-file-input" data-role="file" type="file">' +
+            '<div class="replay-form-file-hint" data-role="fileHint">' + escHtml(fileHint) + '</div>' +
+          '</div>' +
+        '</div>' +
+        '<button class="btn btn-secondary btn-sm replay-form-delete" data-action="delete-multipart-row" type="button">' + escHtml(t('common.delete')) + '</button>' +
+      '</div>';
+    }).join('');
+  }
+
+  function addReplayUrlEncodedRow() {
+    if (!replayUrlEncodedRows) return;
+    var index = replayUrlEncodedRows.querySelectorAll('.replay-form-row').length;
+    replayUrlEncodedRows.insertAdjacentHTML('beforeend', '<div class="replay-form-row" data-row-index="' + index + '">' +
+      '<input class="form-input" data-role="key" type="text" placeholder="' + escAttr(t('replay.fieldName')) + '" value="">' +
+      '<input class="form-input" data-role="value" type="text" placeholder="' + escAttr(t('replay.fieldValue')) + '" value="">' +
+      '<button class="btn btn-secondary btn-sm replay-form-delete" data-action="delete-urlencoded-row" type="button">' + escHtml(t('common.delete')) + '</button>' +
+    '</div>');
+    var added = replayUrlEncodedRows.querySelector('.replay-form-row:last-child [data-role="key"]');
+    if (added) added.focus();
+    syncReplayBodyDraftFromEditor();
+  }
+
+  function addReplayMultipartRow() {
+    if (!replayMultipartRows) return;
+    var index = replayMultipartRows.querySelectorAll('.replay-form-row').length;
+    replayMultipartRows.insertAdjacentHTML('beforeend', '<div class="replay-form-row multipart" data-row-index="' + index + '" data-file-name="" data-file-size="">' +
+      '<input class="form-input" data-role="key" type="text" placeholder="' + escAttr(t('replay.fieldName')) + '" value="">' +
+      '<select class="form-select" data-role="fieldType"><option value="text" selected>' + escHtml(t('replay.text')) + '</option><option value="file">' + escHtml(t('replay.file')) + '</option></select>' +
+      '<div class="replay-form-file-wrap">' +
+        '<input class="form-input" data-role="value" type="text" placeholder="' + escAttr(t('replay.fieldValue')) + '" value="">' +
+        '<div data-role="fileWrap" hidden><input class="replay-form-file-input" data-role="file" type="file"><div class="replay-form-file-hint" data-role="fileHint">' + escHtml(t('replay.noFile')) + '</div></div>' +
+      '</div>' +
+      '<button class="btn btn-secondary btn-sm replay-form-delete" data-action="delete-multipart-row" type="button">' + escHtml(t('common.delete')) + '</button>' +
+    '</div>');
+    var added = replayMultipartRows.querySelector('.replay-form-row:last-child [data-role="key"]');
+    if (added) added.focus();
+    syncReplayBodyDraftFromEditor();
+  }
+
+  function updateReplayMultipartRowMode(row) {
+    if (!row) return;
+    var typeSelect = row.querySelector('[data-role="fieldType"]');
+    var valueInput = row.querySelector('[data-role="value"]');
+    var fileWrap = row.querySelector('[data-role="fileWrap"]');
+    var isFile = typeSelect && typeSelect.value === 'file';
+    if (valueInput) valueInput.hidden = !!isFile;
+    if (fileWrap) fileWrap.hidden = !isFile;
+  }
+
+  function updateReplayMultipartFileHint(row) {
+    if (!row) return;
+    var fileInput = row.querySelector('[data-role="file"]');
+    var hint = row.querySelector('[data-role="fileHint"]');
+    var file = fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+    if (file) {
+      row.dataset.fileName = file.name;
+      row.dataset.fileSize = String(file.size || 0);
+      if (hint) hint.textContent = t('replay.fileSelected', { name: file.name, size: file.size || 0 });
+      return;
+    }
+    if (hint) hint.textContent = row.dataset.fileName ? t('replay.fileSaved', { name: row.dataset.fileName, size: '' }) : t('replay.noFile');
+  }
+
+  function replayMultipartFileName(item) {
+    if (!item) return '';
+    return item.file && item.file.name ? item.file.name : String(item.fileName || '');
+  }
+
+  function replayMultipartFileSize(item) {
+    if (!item) return '';
+    if (item.file && typeof item.file.size === 'number') return item.file.size;
+    return item.fileSize || '';
+  }
+
+  function getHeaderCaseInsensitive(headers, name) {
+    var wanted = String(name || '').toLowerCase();
+    var found = Object.keys(headers || {}).find(function(key) { return key.toLowerCase() === wanted; });
+    return found ? headers[found] : undefined;
+  }
+
+  function setHeaderCaseInsensitive(headers, name, value) {
+    headers = headers || {};
+    var wanted = String(name || '').toLowerCase();
+    var found = Object.keys(headers).find(function(key) { return key.toLowerCase() === wanted; });
+    if (found) headers[found] = value;
+    else headers[name] = value;
+  }
+
+  function removeHeaderCaseInsensitive(headers, name) {
+    var wanted = String(name || '').toLowerCase();
+    Object.keys(headers || {}).forEach(function(key) {
+      if (key.toLowerCase() === wanted) delete headers[key];
+    });
+  }
+
+  function normalizeReplayHeadersForBodyType(headers, type) {
+    type = normalizeReplayBodyType(type);
+    if (type === 'urlencoded') {
+      setHeaderCaseInsensitive(headers, 'Content-Type', 'application/x-www-form-urlencoded;charset=UTF-8');
+    }
+    if (type === 'multipart') {
+      removeHeaderCaseInsensitive(headers, 'Content-Type');
+      removeHeaderCaseInsensitive(headers, 'Content-Length');
+    }
+  }
+
+  function headersToEditorText(headers) {
+    return Object.keys(headers || {}).map(function(key) {
+      return key + ': ' + headers[key];
+    }).join('\n');
+  }
+
+  function buildReplayFetchBody(method, headers, bodyState) {
+    var normalized = normalizeReplayBodyState(bodyState);
+    var upperMethod = String(method || 'GET').toUpperCase();
+    if (upperMethod === 'GET' || upperMethod === 'HEAD') {
+      return { body: undefined, preview: '', state: normalized };
+    }
+    normalizeReplayHeadersForBodyType(headers, normalized.type);
+    if (normalized.type === 'urlencoded') {
+      var params = new URLSearchParams();
+      normalizeReplayUrlEncodedRows(normalized.fields).forEach(function(item) {
+        if (!item.key && item.value) throw new Error(tt('表单字段缺少字段名', 'Form field is missing a field name'));
+        if (!item.key) return;
+        params.append(item.key, item.value || '');
+      });
+      var encoded = params.toString();
+      return { body: encoded ? params : undefined, preview: encoded, state: normalized };
+    }
+    if (normalized.type === 'multipart') {
+      var form = new FormData();
+      var previews = [];
+      var hasField = false;
+      normalizeReplayMultipartRows(normalized.fields).forEach(function(item) {
+        if (!item.key) throw new Error(tt('文件上传字段缺少字段名', 'Upload field is missing a field name'));
+        if (item.type === 'file') {
+          if (!item.file) throw new Error(tt('请选择文件: {key}', 'Please choose a file: {key}', { key: item.key }));
+          form.append(item.key, item.file, item.file.name);
+          previews.push(item.key + '=@' + item.file.name);
+        } else {
+          form.append(item.key, item.value || '');
+          previews.push(item.key + '=' + String(item.value || ''));
+        }
+        hasField = true;
+      });
+      return { body: hasField ? form : undefined, preview: previews.join('\n'), state: normalized };
+    }
+    return { body: normalized.raw ? normalized.raw : undefined, preview: normalized.raw || '', state: normalized };
+  }
+
   function formatReplayBody(mode) {
+    if (getReplayBodyType() !== 'raw') {
+      setReplayStatus(tt('只有“原始 / JSON”请求体可以格式化 JSON', 'Only Raw / JSON bodies can be formatted as JSON'), 'error');
+      return;
+    }
     if (!replayBody || !replayBody.value.trim()) return;
     try {
       var parsed = JSON.parse(replayBody.value);
       replayBody.value = mode === 'minify' ? JSON.stringify(parsed) : JSON.stringify(parsed, null, 2);
-      setReplayStatus(mode === 'minify' ? '请求体已压缩' : '请求体已格式化', 'success');
+      syncReplayBodyDraftFromEditor();
+      setReplayStatus(mode === 'minify' ? tt('请求体已压缩', 'Request body minified') : tt('请求体已格式化', 'Request body formatted'), 'success');
     } catch(e) {
-      setReplayStatus('请求体不是有效 JSON', 'error');
+      setReplayStatus(tt('请求体不是有效 JSON', 'Request body is not valid JSON'), 'error');
     }
   }
 
-  function buildCurlCommand(method, url, headers, body) {
+  function buildCurlCommand(method, url, headers, bodyState) {
+    method = String(method || 'GET').toUpperCase();
+    headers = Object.assign({}, headers || {});
+    var normalized = normalizeReplayBodyState(bodyState);
+    normalizeReplayHeadersForBodyType(headers, normalized.type);
     var parts = ['curl'];
     parts.push('-X');
     parts.push(shellEscape(method));
@@ -2275,9 +3492,19 @@
       parts.push('-H');
       parts.push(shellEscape(key + ': ' + headers[key]));
     });
-    if (body && method !== 'GET' && method !== 'HEAD') {
-      parts.push('--data-raw');
-      parts.push(shellEscape(body));
+    if (method !== 'GET' && method !== 'HEAD' && normalized.type === 'multipart') {
+      normalizeReplayMultipartRows(normalized.fields).forEach(function(item) {
+        if (!item.key) return;
+        parts.push('-F');
+        if (item.type === 'file') parts.push(shellEscape(item.key + '=@' + (replayMultipartFileName(item) || tt('选择文件', 'choose-file'))));
+        else parts.push(shellEscape(item.key + '=' + String(item.value || '')));
+      });
+    } else if (method !== 'GET' && method !== 'HEAD') {
+      var body = replayBodyStateToText(normalized);
+      if (body) {
+        parts.push('--data-raw');
+        parts.push(shellEscape(body));
+      }
     }
     parts.push(shellEscape(url));
     return parts.join(' ');
@@ -2291,17 +3518,17 @@
     var method = replayMethod && replayMethod.value ? replayMethod.value.toUpperCase() : 'GET';
     var url = replayUrl ? replayUrl.value.trim() : '';
     if (!url) {
-      setReplayStatus('没有可复制的 URL', 'error');
-      showToast('没有可复制的 URL', 'error');
+      setReplayStatus(tt('没有可复制的 URL', 'No URL to copy'), 'error');
+      showToast(tt('没有可复制的 URL', 'No URL to copy'), 'error');
       return;
     }
-    var curl = buildCurlCommand(method, url, parseHeadersText(replayHeaders ? replayHeaders.value : ''), replayBody ? replayBody.value : '');
-    navigator.clipboard.writeText(curl).then(function() {
-      setReplayStatus('cURL 已复制', 'success');
-      showToast('cURL 已复制');
+    var curl = buildCurlCommand(method, url, parseHeadersText(replayHeaders ? replayHeaders.value : ''), captureReplayBodyState({ includeFiles: true }));
+    ApiStudioCompat.copyText(curl).then(function() {
+      setReplayStatus(tt('cURL 已复制', 'cURL copied'), 'success');
+      showToast(tt('cURL 已复制', 'cURL copied'));
     }).catch(function(error) {
-      setReplayStatus('复制失败: ' + error.message, 'error');
-      showToast('复制失败: ' + error.message, 'error');
+      setReplayStatus(tt('复制失败: {message}', 'Copy failed: {message}', { message: error.message }), 'error');
+      showToast(tt('复制失败: {message}', 'Copy failed: {message}', { message: error.message }), 'error');
     });
   }
 
@@ -2320,6 +3547,10 @@
         item.fullLabel = item.fullLabel || ((item.method || 'GET') + ' ' + (item.url || ''));
         item.timeText = item.timeText || '';
         item.meta = item.meta || '';
+        var bodyState = getReplayHistoryBodyState(item);
+        item.bodyType = bodyState.type;
+        item.body = replayBodyStateToText(bodyState);
+        item.bodyFields = serializeReplayBodyState(bodyState).fields;
         item.status = normalizeReplayStatus(item.status);
         item.statusText = item.statusText || '';
         item.totalTimeMs = normalizeReplayDurationMs(item.totalTimeMs || item.lastReplayDurationMs || 0);
@@ -2389,13 +3620,13 @@
     if (!replayGroupDropdown) return;
     var filtered = getFilteredReplayGroups();
     if (filtered.length === 0) {
-      replayGroupDropdown.innerHTML = '<div class="g-empty">没有匹配的分组</div>';
+      replayGroupDropdown.innerHTML = '<div class="g-empty">' + escHtml(tt('没有匹配的分组', 'No matching groups')) + '</div>';
       return;
     }
     replayGroupDropdown.innerHTML = filtered.map(function(group) {
       return '<div class="g-item' + (group === activeReplayGroup ? ' active' : '') + '" data-group="' + escAttr(group) + '" title="' + escAttr(group) + '">' +
         '<span class="g-name">' + escHtml(group) + '</span>' +
-        (group === DEFAULT_REPLAY_GROUP ? '' : '<span class="g-actions"><button class="g-act g-act-del" data-action="delete-replay-group" title="删除分组" type="button">删除</button></span>') +
+        (group === DEFAULT_REPLAY_GROUP ? '' : '<span class="g-actions"><button class="g-act g-act-del" data-action="delete-replay-group" title="' + escAttr(tt('删除分组', 'Delete group')) + '" type="button">' + escHtml(t('common.delete')) + '</button></span>') +
       '</div>';
     }).join('');
   }
@@ -2445,22 +3676,22 @@
     var next = normalizeReplayGroup(name);
     if (!next) return;
     selectReplayGroup(next);
-    showToast('已切换到分组：' + next);
+    showToast(tt('已切换到分组：{name}', 'Switched to group: {name}', { name: next }));
   }
 
   async function deleteReplayGroup(name) {
     var group = normalizeReplayGroup(name);
     if (group === DEFAULT_REPLAY_GROUP) {
-      showToast('默认分组不能删除', 'error');
+      showToast(tt('默认分组不能删除', 'The default group cannot be deleted'), 'error');
       return;
     }
     var itemCount = replayHistory.filter(function(item) {
       return normalizeReplayGroup(item.group) === group;
     }).length;
     var message = itemCount > 0
-      ? '删除分组「' + group + '」？该分组下的 ' + itemCount + ' 条保存请求会移动到默认分组。'
-      : '删除分组「' + group + '」？';
-    if (!await appConfirm('删除分组', message, '删除')) return;
+      ? tt('删除分组「{name}」？该分组下的 {count} 条保存请求会移动到默认分组。', 'Delete group "{name}"? {count} saved requests in it will be moved to the default group.', { name: group, count: itemCount })
+      : tt('删除分组「{name}」？', 'Delete group "{name}"?', { name: group });
+    if (!await appConfirm(tt('删除分组', 'Delete group'), message, t('common.delete'))) return;
 
     replayGroups = replayGroups.filter(function(item) {
       return normalizeReplayGroup(item) !== group;
@@ -2476,7 +3707,7 @@
     persistReplayHistory();
     renderReplayHistory();
     loadFirstVisibleReplayHistory();
-    showToast('分组已删除');
+    showToast(tt('分组已删除', 'Group deleted'));
   }
 
   async function moveReplayHistoryToGroup(id) {
@@ -2487,14 +3718,14 @@
       return normalizeReplayGroup(group) !== currentGroup;
     });
     if (targets.length === 0) {
-      showToast('暂无其他已有分组可转移', 'error');
+      showToast(tt('暂无其他已有分组可转移', 'No other existing groups to move to'), 'error');
       return;
     }
 
-    var target = await appSelect('转移分组', '选择要转移到的已有分组', targets);
+    var target = await appSelect(tt('转移分组', 'Move to group'), tt('选择要转移到的已有分组', 'Choose an existing group to move to'), targets);
     if (target === null) return;
     if (!target) {
-      showToast('没有找到这个已有分组', 'error');
+      showToast(tt('没有找到这个已有分组', 'This existing group was not found'), 'error');
       return;
     }
     item.group = normalizeReplayGroup(target);
@@ -2502,7 +3733,7 @@
     persistReplayHistory();
     renderReplayHistory();
     loadFirstVisibleReplayHistory();
-    showToast('已转移到分组：' + item.group);
+    showToast(tt('已转移到分组：{name}', 'Moved to group: {name}', { name: item.group }));
   }
 
   function resetReplayHistorySearch() {
@@ -2531,22 +3762,28 @@
     var method = replayMethod && replayMethod.value ? replayMethod.value.toUpperCase() : 'GET';
     var url = replayUrl ? replayUrl.value.trim() : '';
     var headersText = replayHeaders ? replayHeaders.value : '';
-    var body = replayBody ? replayBody.value : '';
+    var bodyState = captureReplayBodyState({ includeFiles: true });
+    var normalizedHeaders = parseHeadersText(headersText);
+    normalizeReplayHeadersForBodyType(normalizedHeaders, bodyState.type);
+    headersText = headersToEditorText(normalizedHeaders);
+    if (replayHeaders) replayHeaders.value = headersText;
+    var serializedBody = serializeReplayBodyState(bodyState);
+    var body = serializedBody.raw;
     if (!url) {
-      setReplayStatus('没有可保存的 URL', 'error');
-      showToast('没有可保存的 URL', 'error');
+      setReplayStatus(tt('没有可保存的 URL', 'No URL to save'), 'error');
+      showToast(tt('没有可保存的 URL', 'No URL to save'), 'error');
       return;
     }
     var existing = replayHistory.find(function(item) {
       return (item.group || DEFAULT_REPLAY_GROUP) === (activeReplayGroup || DEFAULT_REPLAY_GROUP) &&
-        isReplayHistorySameRequest(item, method, url, headersText, body);
+        isReplayHistorySameRequest(item, method, url, headersText, bodyState);
     });
-    var sourceReq = getReplaySourceForCurrentForm(method, url, headersText, body);
+    var sourceReq = getReplaySourceForCurrentForm(method, url, headersText, bodyState);
     var sourceStatus = normalizeReplayStatus(sourceReq && sourceReq.status);
     var sourceDuration = getReplayRequestDurationMs(sourceReq);
     var requestLine = method + ' ' + displayPath(url);
     var defaultName = existing && existing.name ? existing.name : requestLine;
-    appPrompt('保存请求', '给这个请求起个名字，之后左侧列表会显示这个名字。', defaultName).then(function(inputName) {
+    appPrompt(tt('保存请求', 'Save request'), tt('给这个请求起个名字，之后左侧列表会显示这个名字。', 'Name this request. The name will appear in the left list.'), defaultName).then(function(inputName) {
       if (inputName === null) return;
       var name = String(inputName || '').trim() || requestLine;
       saveReplayHistoryEntry({
@@ -2561,13 +3798,15 @@
         url: url,
         headersText: headersText,
         body: body,
+        bodyType: serializedBody.type,
+        bodyFields: serializedBody.fields,
         status: sourceStatus || (existing ? normalizeReplayStatus(existing.status) : 0),
         statusText: sourceReq ? (sourceReq.statusText || '') : ((existing && existing.statusText) || ''),
         totalTimeMs: sourceDuration || (existing ? normalizeReplayDurationMs(existing.totalTimeMs || existing.lastReplayDurationMs || 0) : 0)
       });
       setText('replaySourceText', requestLine);
-      setReplayStatus(existing ? '保存请求已更新' : '请求已保存', 'success');
-      showToast(existing ? '保存请求已更新' : '请求已保存');
+      setReplayStatus(existing ? tt('保存请求已更新', 'Saved request updated') : tt('请求已保存', 'Request saved'), 'success');
+      showToast(existing ? tt('保存请求已更新', 'Saved request updated') : tt('请求已保存', 'Request saved'));
     });
   }
 
@@ -2583,7 +3822,7 @@
     var visibleHistory = getVisibleReplayHistory();
     Object.keys(selectedReplayHistoryIds).forEach(function(id) { selectedKeys[id] = true; });
     if (visibleHistory.length === 0) {
-      replayHistoryList.innerHTML = '<div class="replay-history-empty">' + (replayHistorySearchText ? '没有匹配的保存请求' : '这个分组还没有保存的请求') + '</div>';
+      replayHistoryList.innerHTML = '<div class="replay-history-empty">' + escHtml(replayHistorySearchText ? t('replay.noSavedMatched') : t('replay.noSavedInGroup')) + '</div>';
       syncReplayHistorySelection();
       return;
     }
@@ -2591,7 +3830,7 @@
       var currentMethod = replayMethod.value || 'GET';
       var currentUrl = replayUrl.value.trim();
       var currentHeaders = replayHeaders ? replayHeaders.value : '';
-      var currentBody = replayBody ? replayBody.value : '';
+      var currentBody = captureReplayBodyState({ includeFiles: true });
       var activeItem = visibleHistory.find(function(item) {
         return isReplayHistorySameRequest(item, currentMethod, currentUrl, currentHeaders, currentBody);
       });
@@ -2603,7 +3842,7 @@
       var displayNameText = truncateReplayHistoryName(nameText);
       return '<div class="replay-history-item' + (activeId === item.id ? ' active' : '') + (selectedKeys[item.id] ? ' batch-selected' : '') + '" data-history-id="' + escAttr(item.id) + '">' +
         '<div class="replay-history-side">' +
-          '<label class="replay-history-select" title="选择"><input type="checkbox" data-history-id="' + escAttr(item.id) + '"' + (selectedKeys[item.id] ? ' checked' : '') + '></label>' +
+          '<label class="replay-history-select" title="' + escAttr(t('common.select')) + '"><input type="checkbox" data-history-id="' + escAttr(item.id) + '"' + (selectedKeys[item.id] ? ' checked' : '') + '></label>' +
           '<span class="replay-history-index">' + (index + 1) + '</span>' +
         '</div>' +
         '<div class="replay-history-main">' +
@@ -2611,9 +3850,9 @@
           '<div class="replay-history-meta-row">' +
             '<div class="replay-history-name" title="' + escAttr(nameText) + '">' + escHtml(displayNameText) + '</div>' +
             '<div class="replay-history-actions">' +
-              '<button type="button" class="replay-history-action" data-action="rename" data-history-id="' + escAttr(item.id) + '" title="重命名">命名</button>' +
-              '<button type="button" class="replay-history-action" data-action="move" data-history-id="' + escAttr(item.id) + '" title="转移分组">转移</button>' +
-              '<button type="button" class="replay-history-action danger" data-action="delete" data-history-id="' + escAttr(item.id) + '" title="删除">删除</button>' +
+              '<button type="button" class="replay-history-action" data-action="rename" data-history-id="' + escAttr(item.id) + '" title="' + escAttr(tt('重命名', 'Rename')) + '">' + escHtml(tt('命名', 'Name')) + '</button>' +
+              '<button type="button" class="replay-history-action" data-action="move" data-history-id="' + escAttr(item.id) + '" title="' + escAttr(tt('转移分组', 'Move group')) + '">' + escHtml(t('common.move')) + '</button>' +
+              '<button type="button" class="replay-history-action danger" data-action="delete" data-history-id="' + escAttr(item.id) + '" title="' + escAttr(t('common.delete')) + '">' + escHtml(t('common.delete')) + '</button>' +
             '</div>' +
           '</div>' +
         '</div>' +
@@ -2630,7 +3869,7 @@
     if (replayMethod) replayMethod.value = item.method || 'GET';
     if (replayUrl) replayUrl.value = item.url || '';
     if (replayHeaders) replayHeaders.value = item.headersText || '';
-    if (replayBody) replayBody.value = item.body || '';
+    applyReplayBodyState(getReplayHistoryBodyState(item));
     setText('replaySourceText', (item.method || 'GET') + ' ' + displayPath(item.url || ''));
     renderReplayResult(null);
     if (replayHistoryList) {
@@ -2638,14 +3877,14 @@
         node.classList.toggle('active', node.dataset.historyId === id);
       });
     }
-    setReplayStatus('已载入保存请求', 'success');
+    setReplayStatus(tt('已载入保存请求', 'Saved request loaded'), 'success');
   }
 
   function renameReplayHistoryEntry(id) {
     var item = replayHistory.find(function(entry) { return entry.id === id; });
     if (!item) return;
     var requestLine = (item.method || 'GET') + ' ' + displayPath(item.url || '');
-    appPrompt('重命名保存请求', '给这个请求起个更好记的名字。', item.name || item.label || requestLine).then(function(inputName) {
+    appPrompt(tt('重命名保存请求', 'Rename saved request'), tt('给这个请求起个更好记的名字。', 'Give this request a more memorable name.'), item.name || item.label || requestLine).then(function(inputName) {
       if (inputName === null) return;
       var name = String(inputName || '').trim() || requestLine;
       item.name = name;
@@ -2654,8 +3893,8 @@
       item.meta = item.meta || requestLine;
       persistReplayHistory();
       renderReplayHistory();
-      setReplayStatus('保存请求已重命名', 'success');
-      showToast('保存请求已重命名');
+      setReplayStatus(tt('保存请求已重命名', 'Saved request renamed'), 'success');
+      showToast(tt('保存请求已重命名', 'Saved request renamed'));
     });
   }
 
@@ -2956,7 +4195,7 @@
     });
     var selectedCount = Object.keys(selectedReplayHistoryIds).length;
     if (replayBatchDeleteBtn) replayBatchDeleteBtn.classList.toggle('show', selectedCount > 0);
-    if (replayBatchDeleteBtn) replayBatchDeleteBtn.textContent = selectedCount > 0 ? '删除 ' + selectedCount + ' 条' : '删除选中';
+    if (replayBatchDeleteBtn) replayBatchDeleteBtn.textContent = selectedCount > 0 ? t('replay.deleteCount', { count: selectedCount }) : t('replay.deleteSelected');
     if (replayHistoryToggleAll) {
       replayHistoryToggleAll.checked = visibleHistory.length > 0 && selectedCount === visibleHistory.length;
       replayHistoryToggleAll.indeterminate = selectedCount > 0 && selectedCount < visibleHistory.length;
@@ -2968,7 +4207,7 @@
     delete selectedReplayHistoryIds[id];
     persistReplayHistory();
     renderReplayHistory();
-    setReplayStatus('保存请求已删除', 'success');
+    setReplayStatus(tt('保存请求已删除', 'Saved request deleted'), 'success');
   }
 
   function resendSelectedRequest() {
@@ -2978,11 +4217,22 @@
     var url = replayUrl ? replayUrl.value.trim() : '';
     var headersText = replayHeaders ? replayHeaders.value : '';
     var headers = parseHeadersText(headersText);
-    var body = replayBody ? replayBody.value : '';
+    var bodyState = captureReplayBodyState({ includeFiles: true });
 
     if (!url) {
-      setReplayStatus('请输入请求 URL', 'error');
+      setReplayStatus(tt('请输入请求 URL', 'Please enter a request URL'), 'error');
       if (replayUrl) replayUrl.focus();
+      return;
+    }
+
+    var bodyPayload;
+    try {
+      bodyPayload = buildReplayFetchBody(method, headers, bodyState);
+      headersText = headersToEditorText(headers);
+      if (replayHeaders) replayHeaders.value = headersText;
+    } catch (error) {
+      setReplayStatus(tt('发送失败: {message}', 'Send failed: {message}', { message: error.message }), 'error');
+      showToast(tt('发送失败: {message}', 'Send failed: {message}', { message: error.message }), 'error');
       return;
     }
 
@@ -2994,11 +4244,11 @@
     };
     if (!fetchOptions.headers['Cache-Control']) fetchOptions.headers['Cache-Control'] = 'no-cache';
     if (!fetchOptions.headers.Pragma) fetchOptions.headers.Pragma = 'no-cache';
-    if (method !== 'GET' && method !== 'HEAD' && body) fetchOptions.body = body;
+    if (method !== 'GET' && method !== 'HEAD' && bodyPayload.body) fetchOptions.body = bodyPayload.body;
 
     sendReplayBtn.disabled = true;
     var activeThrottle = getActiveThrottleProfileForScope('replay');
-    setReplayStatus(activeThrottle ? ('请求发送中... 当前弱网预设: ' + throttleSummaryText(activeThrottle)) : '请求发送中...', '');
+    setReplayStatus(activeThrottle ? tt('请求发送中... 当前弱网预设: {summary}', 'Sending request... Current throttle profile: {summary}', { summary: throttleSummaryText(activeThrottle) }) : tt('请求发送中...', 'Sending request...'), '');
     var startedAt = Date.now();
 
     Promise.resolve()
@@ -3052,14 +4302,15 @@
       req.method = method;
       req.url = url;
       req.headers = normalizeHeaderKeys(headers);
-      req.postData = method === 'GET' || method === 'HEAD' ? '' : body;
+      req.postData = method === 'GET' || method === 'HEAD' ? '' : bodyPayload.preview;
+      req.replayBodyState = serializeReplayBodyState(bodyPayload.state);
       req.status = result.status;
       req.statusText = result.statusText;
       req.resHeaders = result.headers;
       req.responseContent = result.body;
       req.responseEncoding = '';
       req.responseBodyState = req.responseContent ? 'text' : 'empty';
-      req.responseBodyMessage = req.responseContent ? '' : '该请求没有可返回的响应体。';
+      req.responseBodyMessage = req.responseContent ? '' : tt('该请求没有可返回的响应体。', 'This request has no response body.');
       req.mimeType = result.headers['content-type'] || req.mimeType || '';
       req.resourceType = requestTypeFromValues(url, req.mimeType);
       req.lastReplayDurationMs = durationMs;
@@ -3068,18 +4319,21 @@
       replayRequestId = req.id;
       req.imported = hasImportedRuleForRequest(req);
       if (!req.imported) req.ruleId = '';
-      syncReplayHistoryResult(method, url, headersText, body, result.status, result.statusText, durationMs);
+      syncReplayHistoryResult(method, url, headersText, bodyPayload.state, result.status, result.statusText, durationMs);
       updateStoredRequestSnapshot(req);
       renderNetworkList();
       renderBeaconTab();
       if (selectedId === req.id) showDetails(req.id);
-      renderReplayTab();
+      renderReplayResult(req);
+      setText('replaySourceText', method + ' ' + displayPath(url));
+      renderReplayHistory();
+      updateReplayThrottleHint();
       updateBadge();
-      setReplayStatus('请求已完成，状态码 ' + result.status + '，耗时 ' + durationMs + ' ms', result.ok ? 'success' : 'error');
-      showToast(result.ok ? '请求已重发' : ('请求返回错误状态码 ' + result.status), result.ok ? undefined : 'error');
+      setReplayStatus(tt('请求已完成，状态码 {status}，耗时 {time} ms', 'Request completed, status {status}, time {time} ms', { status: result.status, time: durationMs }), result.ok ? 'success' : 'error');
+      showToast(result.ok ? tt('请求已重发', 'Request resent') : tt('请求返回错误状态码 {status}', 'Request returned error status {status}', { status: result.status }), result.ok ? undefined : 'error');
     }).catch(function(error) {
-      setReplayStatus('发送失败: ' + error.message, 'error');
-      showToast('发送失败: ' + error.message, 'error');
+      setReplayStatus(tt('发送失败: {message}', 'Send failed: {message}', { message: error.message }), 'error');
+      showToast(tt('发送失败: {message}', 'Send failed: {message}', { message: error.message }), 'error');
     }).finally(function() {
       sendReplayBtn.disabled = false;
     });
@@ -3125,7 +4379,7 @@
       renderNetworkList();
       renderBeaconTab();
       showDetails(req.id);
-      showToast('✦ 已导入: ' + name);
+      showToast(tt('✦ 已导入: {name}', '✦ Imported: {name}', { name: name }));
     });
   }
 
@@ -3140,7 +4394,7 @@
       renderNetworkList();
       renderBeaconTab();
       if (selectedId === req.id) showDetails(req.id);
-      showToast('已取消导入 Mock');
+      showToast(tt('已取消导入 Mock', 'Mock import removed'));
     });
   }
 
@@ -3216,7 +4470,7 @@
   function replayHistoryNameText(item) {
     var name = String((item && (item.name || item.label)) || '').trim();
     var requestLine = ((item && item.method) || 'GET') + ' ' + displayPath((item && item.url) || '');
-    return name && name !== requestLine ? name : '未命名';
+    return name && name !== requestLine ? name : t('common.unnamed');
   }
 
   function truncateReplayHistoryName(name) {
@@ -3228,20 +4482,21 @@
     return String(value || '').replace(/\r\n/g, '\n');
   }
 
-  function isReplayHistorySameRequest(item, method, url, headersText, body) {
+  function isReplayHistorySameRequest(item, method, url, headersText, bodyState) {
     return !!item &&
       (item.method || 'GET').toUpperCase() === String(method || 'GET').toUpperCase() &&
       item.url === url &&
       replayHeadersSignature(item.headersText) === replayHeadersSignature(headersText) &&
-      normalizeReplayText(item.body) === normalizeReplayText(body);
+      replayBodySignature(getReplayHistoryBodyState(item)) === replayBodySignature(bodyState);
   }
 
-  function getReplaySourceForCurrentForm(method, url, headersText, body) {
+  function getReplaySourceForCurrentForm(method, url, headersText, bodyState) {
     var req = replayRequestId ? findReq(replayRequestId) : null;
     if (!req) return null;
     if ((req.method || 'GET').toUpperCase() !== String(method || 'GET').toUpperCase() || req.url !== url) return null;
     if (replayHeadersSignature(buildReplayHeadersText(req)) !== replayHeadersSignature(headersText)) return null;
-    if (normalizeReplayText(req.postData || '') !== normalizeReplayText(body)) return null;
+    var reqBodyState = req.replayBodyState || replayBodyStateFromRaw(req.postData || '', buildReplayHeadersText(req));
+    if (replayBodySignature(reqBodyState) !== replayBodySignature(bodyState)) return null;
     return req;
   }
 
@@ -3260,10 +4515,10 @@
     renderNetworkList();
   }
 
-  function syncReplayHistoryResult(method, url, headersText, body, status, statusText, durationMs) {
+  function syncReplayHistoryResult(method, url, headersText, bodyState, status, statusText, durationMs) {
     var changed = false;
     replayHistory.forEach(function(item) {
-      if (!isReplayHistorySameRequest(item, method, url, headersText, body)) return;
+      if (!isReplayHistorySameRequest(item, method, url, headersText, bodyState)) return;
       item.status = normalizeReplayStatus(status);
       item.statusText = statusText || '';
       item.totalTimeMs = normalizeReplayDurationMs(durationMs);
@@ -3280,10 +4535,10 @@
   }
 
   function formatTimeSourceHint(source) {
-    if (source === 'har') return 'HAR: 浏览器 DevTools/HAR 提供的原生总耗时';
-    if (source === 'timings') return 'timings: 使用请求各阶段耗时相加得到的近似总耗时';
-    if (source === 'replay') return 'Replay: 使用本插件重新发送请求时记录的耗时';
-    return '耗时来源未知';
+    if (source === 'har') return tt('HAR: 浏览器 DevTools/HAR 提供的原生总耗时', 'HAR: native total time from browser DevTools/HAR');
+    if (source === 'timings') return tt('timings: 使用请求各阶段耗时相加得到的近似总耗时', 'timings: approximate total time from summed request phases');
+    if (source === 'replay') return tt('Replay: 使用本插件重新发送请求时记录的耗时', 'Replay: duration recorded when this extension resent the request');
+    return tt('耗时来源未知', 'Unknown timing source');
   }
 
   function loadCookieEntries() {
@@ -3301,7 +4556,7 @@
 
   function renderCookiesTab() {
     if (!cookiesList) return;
-    if (cookiesCountBadge) cookiesCountBadge.textContent = cookieEntries.length + ' 组 Cookies';
+    if (cookiesCountBadge) cookiesCountBadge.textContent = t('cookies.count', { count: cookieEntries.length });
     if (cookieEntries.length === 0) {
       cookiesList.innerHTML = '';
       if (cookiesEmpty) cookiesList.appendChild(cookiesEmpty);
@@ -3341,14 +4596,15 @@
 
   function buildLegacyBeaconConditions(saved) {
     if (!saved || (!saved.field && !saved.contains)) return [];
-    return [{ field: saved.field || '', contains: saved.contains || '' }];
+    return [{ field: saved.field || '', contains: saved.contains || '', mode: 'fuzzy' }];
   }
 
   function normalizeBeaconConditions(conditions) {
     return (conditions || []).map(function(item) {
       return {
         field: String((item && item.field) || '').trim(),
-        contains: String((item && item.contains) || '').trim()
+        contains: String((item && item.contains) || '').trim(),
+        mode: (item && item.mode) === 'exact' ? 'exact' : 'fuzzy'
       };
     }).filter(function(item) {
       return item.field || item.contains;
@@ -3361,12 +4617,17 @@
 
   function renderBeaconConditionRows() {
     if (!beaconConditions) return;
-    var rows = (beaconConfig.conditions && beaconConfig.conditions.length ? beaconConfig.conditions : [{ field: '', contains: '' }]);
+    var rows = (beaconConfig.conditions && beaconConfig.conditions.length ? beaconConfig.conditions : [{ field: '', contains: '', mode: 'fuzzy' }]);
     beaconConditions.innerHTML = rows.map(function(item, index) {
+      var mode = item.mode === 'exact' ? 'exact' : 'fuzzy';
       return '<div class="beacon-condition-row" data-index="' + index + '">' +
-        '<input class="form-input beacon-input beacon-condition-key" type="text" placeholder="关注的字段 key" value="' + escAttr(item.field || '') + '">' +
-        '<input class="form-input beacon-input beacon-condition-value" type="text" placeholder="对应 value" value="' + escAttr(item.contains || '') + '">' +
-        '<button class="btn btn-sm beacon-condition-remove" data-action="delete-beacon-condition" type="button" title="删除条件">删除</button>' +
+        '<input class="form-input beacon-input beacon-condition-key" type="text" placeholder="' + escAttr(t('beacon.keyPlaceholder')) + '" value="' + escAttr(item.field || '') + '">' +
+        '<input class="form-input beacon-input beacon-condition-value" type="text" placeholder="' + escAttr(t('beacon.valuePlaceholder')) + '" value="' + escAttr(item.contains || '') + '">' +
+        '<select class="form-select form-select-sm beacon-condition-mode" title="' + escAttr(t('beacon.matchMode')) + '">' +
+          '<option value="fuzzy"' + (mode === 'fuzzy' ? ' selected' : '') + '>' + escHtml(t('beacon.fuzzy')) + '</option>' +
+          '<option value="exact"' + (mode === 'exact' ? ' selected' : '') + '>' + escHtml(t('beacon.exact')) + '</option>' +
+        '</select>' +
+        '<button class="btn btn-sm beacon-condition-remove" data-action="delete-beacon-condition" type="button" title="' + escAttr(t('beacon.deleteCondition')) + '">' + escHtml(t('common.delete')) + '</button>' +
       '</div>';
     }).join('');
     updateBeaconConditionRemoveState();
@@ -3376,7 +4637,7 @@
   function updateBeaconConditionVisibility() {
     if (beaconConditions) beaconConditions.classList.toggle('collapsed', !beaconConditionsExpanded);
     if (addBeaconConditionBtn) addBeaconConditionBtn.style.display = beaconConditionsExpanded ? 'inline-flex' : 'none';
-    if (toggleBeaconConditionsBtn) toggleBeaconConditionsBtn.textContent = beaconConditionsExpanded ? '收起条件' : '编辑条件';
+    if (toggleBeaconConditionsBtn) toggleBeaconConditionsBtn.textContent = beaconConditionsExpanded ? t('beacon.collapseConditions') : t('beacon.editConditions');
     if (beaconConditionSummary) beaconConditionSummary.style.display = beaconConditionsExpanded ? 'none' : 'flex';
     renderBeaconConditionSummary();
   }
@@ -3386,12 +4647,13 @@
     var conditions = getBeaconConditions();
     if (!conditions.length) {
       beaconConditionSummary.classList.add('empty');
-      beaconConditionSummary.textContent = '未设置关注条件';
+      beaconConditionSummary.textContent = t('beacon.noConditions');
       return;
     }
     beaconConditionSummary.classList.remove('empty');
     beaconConditionSummary.innerHTML = conditions.map(function(item) {
-      var text = item.field + (item.contains ? '=' + item.contains : '');
+      var op = item.mode === 'exact' ? '=' : '≈';
+      var text = (item.field || t('beacon.fullText')) + (item.contains ? op + item.contains : '');
       return '<span class="beacon-condition-chip" title="' + escAttr(text) + '">' + escHtml(text) + '</span>';
     }).join('');
   }
@@ -3401,7 +4663,8 @@
     beaconConfig.conditions = Array.prototype.slice.call(beaconConditions.querySelectorAll('.beacon-condition-row')).map(function(row) {
       return {
         field: ((row.querySelector('.beacon-condition-key') || {}).value || '').trim(),
-        contains: ((row.querySelector('.beacon-condition-value') || {}).value || '').trim()
+        contains: ((row.querySelector('.beacon-condition-value') || {}).value || '').trim(),
+        mode: ((row.querySelector('.beacon-condition-mode') || {}).value || 'fuzzy') === 'exact' ? 'exact' : 'fuzzy'
       };
     });
   }
@@ -3411,7 +4674,7 @@
       updateBeaconConditionRemoveState();
       return;
     }
-    beaconConfig.conditions = [{ field: '', contains: '' }];
+    beaconConfig.conditions = [{ field: '', contains: '', mode: 'fuzzy' }];
     renderBeaconConditionRows();
   }
 
@@ -3429,7 +4692,7 @@
     var matches = getBeaconMatches();
     beaconCountBadge.textContent = matches.length > 0 ? String(matches.length) : '';
     beaconCountBadge.classList.toggle('show', matches.length > 0);
-    beaconCountBadge.title = matches.length + ' 条命中';
+    beaconCountBadge.title = t('beacon.hitTitle', { count: matches.length });
     if (matches.length === 0) {
       beaconList.innerHTML = '';
       if (beaconEmpty) beaconList.appendChild(beaconEmpty);
@@ -3443,7 +4706,7 @@
     beaconList.innerHTML = matches.map(function(item, index) {
       var req = item.req;
       var fieldBadge = item.fieldValues.length
-        ? '<span class="beacon-match-badge">' + escHtml(item.fieldValues.length + ' 个字段值') + '</span>'
+        ? '<span class="beacon-match-badge">' + escHtml(t('beacon.fieldValueCount', { count: item.fieldValues.length })) + '</span>'
         : '';
       return '<div class="beacon-match-item' + (item.id === selectedBeaconId ? ' active' : '') + '" data-beacon-id="' + escAttr(item.id) + '">' +
         '<div class="beacon-match-top">' +
@@ -3454,7 +4717,7 @@
         '<div class="beacon-match-path" title="' + escAttr(req.url || '') + '">' + escHtml(displayPath(req.url || '')) + '</div>' +
         '<div class="beacon-match-bottom">' +
           '<div class="beacon-match-meta">' + escHtml(item.summary) + '</div>' +
-          '<button class="beacon-match-delete" data-action="delete-beacon-match" type="button" title="删除这条命中">删除</button>' +
+          '<button class="beacon-match-delete" data-action="delete-beacon-match" type="button" title="' + escAttr(t('beacon.deleteHit')) + '">' + escHtml(t('common.delete')) + '</button>' +
         '</div>' +
       '</div>';
     }).join('');
@@ -3475,12 +4738,12 @@
     setText('beaconDetailTime', formatDateTime(new Date(match.req.startedDateTime || Date.now())));
     var conditions = getBeaconConditions();
     var fieldText = conditions.length
-      ? (match.matchedConditions.length + '/' + conditions.length + ' 个条件命中')
-      : '未设置关注字段';
+      ? t('beacon.conditionsHit', { hit: match.matchedConditions.length, total: conditions.length })
+      : t('beacon.noWatchField');
     setText('beaconDetailField', fieldText);
     var fieldEl = $('beaconDetailField');
     if (fieldEl) fieldEl.className = 'value ' + (conditions.length && match.matchedConditions.length === conditions.length ? 'beacon-field-hit' : 'beacon-field-miss');
-    setText('beaconDetailFieldValues', match.fieldValues.length ? match.fieldValues.map(function(item) { return item.path + ': ' + item.value; }).join('\n') : '无');
+    setText('beaconDetailFieldValues', match.fieldValues.length ? match.fieldValues.map(function(item) { return item.path + ': ' + item.value; }).join('\n') : t('common.empty'));
     setBeaconPayloadHtml(match);
   }
 
@@ -3488,7 +4751,7 @@
     var el = $('beaconDetailPayload');
     if (!el) return;
     if (!match || !match.payloadText) {
-      el.textContent = '无';
+      el.textContent = t('common.empty');
       return;
     }
     el.innerHTML = buildHighlightedBeaconPayloadHtml(match.parsed && match.parsed.merged, getBeaconConditions());
@@ -3535,7 +4798,7 @@
     renderNetworkList();
     renderBeaconTab();
     updateBadge();
-    showToast('命中记录已删除');
+    showToast(tt('命中记录已删除', 'Hit entry deleted'));
   }
 
   function isBeaconMatch(req) {
@@ -3600,12 +4863,11 @@
     conditions.forEach(function(condition) {
       var values = collectBeaconFieldValues(source, condition.field);
       if (condition.contains) {
-        var containsLower = condition.contains.toLowerCase();
         values = values.filter(function(item) {
-          return String(item.value).toLowerCase().indexOf(containsLower) !== -1;
+          return beaconValueMatches(item.rawValue, condition.contains, condition.mode);
         });
       }
-      if (!condition.field || values.length === 0) {
+      if (values.length === 0) {
         result.matched = false;
         return;
       }
@@ -3619,12 +4881,13 @@
     var highlightRules = (conditions || []).map(function(condition) {
       return {
         fieldLower: String(condition.field || '').trim().toLowerCase(),
-        containsLower: String(condition.contains || '').trim().toLowerCase()
+        containsText: String(condition.contains || '').trim(),
+        mode: condition.mode === 'exact' ? 'exact' : 'fuzzy'
       };
-    }).filter(function(rule) { return !!rule.fieldLower; });
+    }).filter(function(rule) { return !!rule.fieldLower || !!rule.containsText; });
     var lines = [];
     renderBeaconJsonValue(payload, '', 0, lines, highlightRules);
-    return lines.join('\n') || '无';
+    return lines.join('\n') || t('common.empty');
   }
 
   function renderBeaconJsonValue(value, path, depth, lines, highlightRules) {
@@ -3644,22 +4907,22 @@
       lines.push(indent + '{');
       keys.forEach(function(key, index) {
         var nextPath = path ? path + '.' + key : key;
-        var hitRule = getBeaconHighlightRule(key, null, highlightRules);
+        var item = value[key];
+        var hitRule = getBeaconHighlightRule(key, item, nextPath, highlightRules);
         var keyHtml = escHtml(JSON.stringify(key));
         if (hitRule) keyHtml = '<span class="beacon-json-hit-key">' + keyHtml + '</span>';
-        var item = value[key];
         if (item && typeof item === 'object') {
           lines.push(repeatSpaces((depth + 1) * 2) + keyHtml + ': ' + (Array.isArray(item) ? '[' : '{'));
           renderBeaconJsonChildren(item, nextPath, depth + 2, lines, highlightRules);
           lines.push(repeatSpaces((depth + 1) * 2) + (Array.isArray(item) ? ']' : '}') + (index < keys.length - 1 ? ',' : ''));
         } else {
-          lines.push(repeatSpaces((depth + 1) * 2) + keyHtml + ': ' + formatBeaconJsonPrimitive(item, key, highlightRules) + (index < keys.length - 1 ? ',' : ''));
+          lines.push(repeatSpaces((depth + 1) * 2) + keyHtml + ': ' + formatBeaconJsonPrimitive(item, key, nextPath, highlightRules) + (index < keys.length - 1 ? ',' : ''));
         }
       });
       lines.push(indent + '}');
       return;
     }
-    lines.push(indent + formatBeaconJsonPrimitive(value, '', highlightRules));
+    lines.push(indent + formatBeaconJsonPrimitive(value, '', path, highlightRules));
   }
 
   function renderBeaconJsonChildren(value, path, depth, lines, highlightRules) {
@@ -3673,16 +4936,16 @@
       }
       var key = entry;
       var nextPath = path ? path + '.' + key : key;
-      var hitRule = getBeaconHighlightRule(key, null, highlightRules);
+      var item = value[key];
+      var hitRule = getBeaconHighlightRule(key, item, nextPath, highlightRules);
       var keyHtml = escHtml(JSON.stringify(key));
       if (hitRule) keyHtml = '<span class="beacon-json-hit-key">' + keyHtml + '</span>';
-      var item = value[key];
       if (item && typeof item === 'object') {
         lines.push(repeatSpaces(depth * 2) + keyHtml + ': ' + (Array.isArray(item) ? '[' : '{'));
         renderBeaconJsonChildren(item, nextPath, depth + 1, lines, highlightRules);
         lines.push(repeatSpaces(depth * 2) + (Array.isArray(item) ? ']' : '}') + (index < entries.length - 1 ? ',' : ''));
       } else {
-        lines.push(repeatSpaces(depth * 2) + keyHtml + ': ' + formatBeaconJsonPrimitive(item, key, highlightRules) + (index < entries.length - 1 ? ',' : ''));
+        lines.push(repeatSpaces(depth * 2) + keyHtml + ': ' + formatBeaconJsonPrimitive(item, key, nextPath, highlightRules) + (index < entries.length - 1 ? ',' : ''));
       }
     });
   }
@@ -3692,21 +4955,34 @@
     lines[lines.length - 1] += ',';
   }
 
-  function formatBeaconJsonPrimitive(value, key, highlightRules) {
+  function formatBeaconJsonPrimitive(value, key, path, highlightRules) {
     var text = JSON.stringify(value);
     if (text === undefined) text = String(value);
-    var shouldHighlight = !!getBeaconHighlightRule(key, value, highlightRules);
+    var shouldHighlight = !!getBeaconHighlightRule(key, value, path, highlightRules);
     var html = escHtml(text);
     return shouldHighlight ? '<span class="beacon-json-hit-value">' + html + '</span>' : html;
   }
 
-  function getBeaconHighlightRule(key, value, highlightRules) {
+  function getBeaconHighlightRule(key, value, path, highlightRules) {
     var keyLower = String(key || '').toLowerCase();
     return (highlightRules || []).find(function(rule) {
-      if (!rule.fieldLower || keyLower !== rule.fieldLower) return false;
-      if (!rule.containsLower || value === null) return true;
-      return String(value).toLowerCase().indexOf(rule.containsLower) !== -1;
+      var containsText = rule.containsText || '';
+      if (!rule.fieldLower) {
+        return containsText && (beaconValueMatches(key, containsText, rule.mode) || beaconValueMatches(value, containsText, rule.mode));
+      }
+      if (keyLower === rule.fieldLower) {
+        return !containsText || beaconValueMatches(value, containsText, rule.mode);
+      }
+      if (!isBeaconPathInsideField(path, rule.fieldLower)) return false;
+      return containsText && (beaconValueMatches(key, containsText, rule.mode) || beaconValueMatches(value, containsText, rule.mode));
     }) || null;
+  }
+
+  function isBeaconPathInsideField(path, fieldLower) {
+    if (!path || !fieldLower) return false;
+    return String(path).toLowerCase().split('.').some(function(part) {
+      return part.replace(/\[\d+\]/g, '') === fieldLower;
+    });
   }
 
   function repeatSpaces(count) {
@@ -3715,7 +4991,9 @@
 
   function collectBeaconFieldValues(source, fieldName) {
     var hits = [];
-    if (!fieldName) return hits;
+    if (!fieldName) {
+      return [{ path: 'payload', value: formatBeaconFieldValue(source), rawValue: source }];
+    }
     walkBeaconObject(source, '', String(fieldName).toLowerCase(), hits);
     return hits;
   }
@@ -3733,11 +5011,178 @@
       if (String(key).toLowerCase() === fieldLower) {
         hits.push({
           path: nextPath,
-          value: typeof value[key] === 'object' ? JSON.stringify(value[key]) : String(value[key])
+          value: formatBeaconFieldValue(value[key]),
+          rawValue: value[key]
         });
       }
       walkBeaconObject(value[key], nextPath, fieldLower, hits);
     });
+  }
+
+  function formatBeaconFieldValue(value) {
+    if (value && typeof value === 'object') {
+      try { return JSON.stringify(value); } catch (e) { return String(value); }
+    }
+    return String(value);
+  }
+
+  function beaconValueMatches(value, expectedText, mode) {
+    expectedText = String(expectedText || '').trim();
+    if (!expectedText) return true;
+
+    var matchValue = parseBeaconActualJson(value);
+    var parsedExpected = parseBeaconExpectedJson(expectedText);
+    if (mode === 'exact') return beaconValueExactMatches(matchValue, parsedExpected, expectedText);
+    if (parsedExpected.ok && partialBeaconJsonMatch(matchValue, parsedExpected.value)) return true;
+
+    var searchText = buildBeaconSearchText(matchValue);
+    if (matchValue !== value) searchText += '\n' + buildBeaconSearchText(value);
+    searchText = searchText.toLowerCase();
+    var expectedLower = expectedText.toLowerCase();
+    if (searchText.indexOf(expectedLower) !== -1) return true;
+
+    var compactSearch = normalizeBeaconSearchText(searchText);
+    var compactExpected = normalizeBeaconSearchText(expectedLower);
+    if (compactExpected && compactSearch.indexOf(compactExpected) !== -1) return true;
+
+    var tokens = expectedLower.split(/[\s,;:=]+/).map(function(item) {
+      return item.trim();
+    }).filter(Boolean);
+    return tokens.length > 1 && tokens.every(function(token) {
+      return searchText.indexOf(token) !== -1 || compactSearch.indexOf(normalizeBeaconSearchText(token)) !== -1;
+    });
+  }
+
+  function beaconValueExactMatches(value, parsedExpected, expectedText) {
+    if (parsedExpected.ok) return partialBeaconJsonMatch(value, parsedExpected.value, true);
+    if (value && typeof value === 'object') return beaconExactTextInObject(value, expectedText);
+    return normalizeBeaconExactText(value) === normalizeBeaconExactText(expectedText);
+  }
+
+  function beaconExactTextInObject(value, expectedText) {
+    var expected = normalizeBeaconExactText(expectedText);
+    if (!expected) return true;
+    var matched = false;
+    walkBeaconExactValue(value, function(key, item) {
+      if (matched) return;
+      if (normalizeBeaconExactText(key) === expected) {
+        matched = true;
+        return;
+      }
+      if (!item || typeof item !== 'object') matched = normalizeBeaconExactText(item) === expected;
+    });
+    return matched;
+  }
+
+  function walkBeaconExactValue(value, visitor) {
+    if (Array.isArray(value)) {
+      value.forEach(function(item, index) {
+        visitor(String(index), item);
+        walkBeaconExactValue(item, visitor);
+      });
+      return;
+    }
+    if (!value || typeof value !== 'object') return;
+    Object.keys(value).forEach(function(key) {
+      visitor(key, value[key]);
+      walkBeaconExactValue(value[key], visitor);
+    });
+  }
+
+  function parseBeaconExpectedJson(text) {
+    try {
+      return { ok: true, value: JSON.parse(text) };
+    } catch (e) {
+      return { ok: false, value: null };
+    }
+  }
+
+  function parseBeaconActualJson(value) {
+    if (typeof value !== 'string') return value;
+    var text = value.trim();
+    if (!text) return value;
+    var parsed = parseBeaconExpectedJson(text);
+    return parsed.ok ? parsed.value : value;
+  }
+
+  function partialBeaconJsonMatch(actual, expected, exactPrimitive) {
+    if (Array.isArray(expected)) {
+      if (Array.isArray(actual)) {
+        return expected.every(function(expectedItem) {
+          return actual.some(function(actualItem) { return partialBeaconJsonMatch(actualItem, expectedItem, exactPrimitive); });
+        });
+      }
+      if (actual && typeof actual === 'object') return Object.keys(actual).some(function(key) { return partialBeaconJsonMatch(actual[key], expected, exactPrimitive); });
+      return false;
+    }
+
+    if (expected && typeof expected === 'object') {
+      if (Array.isArray(actual)) return actual.some(function(item) { return partialBeaconJsonMatch(item, expected, exactPrimitive); });
+      if (!actual || typeof actual !== 'object') return false;
+      if (isBeaconObjectSubset(actual, expected, exactPrimitive)) return true;
+      return Object.keys(actual).some(function(key) { return partialBeaconJsonMatch(actual[key], expected, exactPrimitive); });
+    }
+
+    return exactPrimitive ? normalizeBeaconExactText(actual) === normalizeBeaconExactText(expected) : beaconPrimitiveMatches(actual, expected);
+  }
+
+  function isBeaconObjectSubset(actual, expected, exactPrimitive) {
+    return Object.keys(expected).every(function(expectedKey) {
+      var actualKey = findBeaconObjectKey(actual, expectedKey);
+      return actualKey !== null && partialBeaconJsonMatch(actual[actualKey], expected[expectedKey], exactPrimitive);
+    });
+  }
+
+  function findBeaconObjectKey(obj, key) {
+    if (!obj || typeof obj !== 'object') return null;
+    if (Object.prototype.hasOwnProperty.call(obj, key)) return key;
+    var lower = String(key).toLowerCase();
+    var keys = Object.keys(obj);
+    for (var i = 0; i < keys.length; i++) {
+      if (String(keys[i]).toLowerCase() === lower) return keys[i];
+    }
+    return null;
+  }
+
+  function beaconPrimitiveMatches(actual, expected) {
+    var actualText = buildBeaconSearchText(actual).toLowerCase();
+    var expectedText = String(expected == null ? '' : expected).toLowerCase();
+    if (!expectedText) return true;
+    return actualText.indexOf(expectedText) !== -1 || normalizeBeaconSearchText(actualText).indexOf(normalizeBeaconSearchText(expectedText)) !== -1;
+  }
+
+  function buildBeaconSearchText(value) {
+    var lines = [];
+    try { lines.push(JSON.stringify(value)); } catch (e) { lines.push(String(value)); }
+    appendBeaconSearchLines(value, '', lines);
+    return lines.filter(Boolean).join('\n');
+  }
+
+  function appendBeaconSearchLines(value, path, lines) {
+    if (Array.isArray(value)) {
+      value.forEach(function(item, index) {
+        appendBeaconSearchLines(item, path + '[' + index + ']', lines);
+      });
+      return;
+    }
+    if (value && typeof value === 'object') {
+      Object.keys(value).forEach(function(key) {
+        var nextPath = path ? path + '.' + key : key;
+        lines.push(nextPath);
+        appendBeaconSearchLines(value[key], nextPath, lines);
+      });
+      return;
+    }
+    if (path) lines.push(path + '=' + String(value));
+    lines.push(String(value));
+  }
+
+  function normalizeBeaconSearchText(text) {
+    return String(text || '').toLowerCase().replace(/[\s"'`{}\[\](),;:=]+/g, '').replace(/\\/g, '');
+  }
+
+  function normalizeBeaconExactText(value) {
+    return String(value == null ? '' : value).trim().toLowerCase();
   }
 
   function stringifyBeaconPayload(payload) {
@@ -3748,12 +5193,12 @@
     var parts = [];
     var queryKeys = Object.keys(parsed.query || {});
     var bodyKeys = parsed.body && typeof parsed.body === 'object' ? Object.keys(parsed.body) : [];
-    if (queryKeys.length) parts.push('Query ' + queryKeys.length + ' 项');
-    if (bodyKeys.length) parts.push('Body ' + bodyKeys.length + ' 项');
+    if (queryKeys.length) parts.push(t('beacon.summaryQuery', { count: queryKeys.length }));
+    if (bodyKeys.length) parts.push(t('beacon.summaryBody', { count: bodyKeys.length }));
     if ((conditions || []).length) {
-      parts.push(fieldValues.length ? ('条件命中 ' + fieldValues.length + ' 项') : '条件未命中');
+      parts.push(fieldValues.length ? t('beacon.summaryConditionHit', { count: fieldValues.length }) : t('beacon.summaryConditionMiss'));
     }
-    return parts.join(' · ') || '无可解析字段';
+    return parts.join(' · ') || t('beacon.summaryEmpty');
   }
 
   function showCookieEntry(id) {
@@ -3775,9 +5220,17 @@
   }
 
   function loadThrottleProfiles() {
-    chrome.storage.local.get(['throttleProfiles', 'activeThrottleProfileId'], function(result) {
-      throttleProfiles = mergeDefaultThrottleProfiles(result.throttleProfiles).map(normalizeThrottleProfile);
+    chrome.storage.local.get(['throttleProfiles', 'activeThrottleProfileId', 'throttleDefaultsPageScopeMigrated'], function(result) {
+      var shouldMigrateDefaultScopes = result.throttleDefaultsPageScopeMigrated !== true;
+      var rawProfiles = Array.isArray(result.throttleProfiles) ? result.throttleProfiles : [];
+      throttleProfiles = mergeDefaultThrottleProfiles(rawProfiles, shouldMigrateDefaultScopes).map(normalizeThrottleProfile);
       activeThrottleProfileId = result.activeThrottleProfileId || '';
+      if (shouldMigrateDefaultScopes || JSON.stringify(rawProfiles) !== JSON.stringify(throttleProfiles)) {
+        chrome.storage.local.set({
+          throttleProfiles: throttleProfiles,
+          throttleDefaultsPageScopeMigrated: true
+        });
+      }
       renderThrottleTab();
     });
   }
@@ -3793,20 +5246,32 @@
 
   function defaultThrottleProfiles() {
     return [
-      { id: 'thr_2g', name: '2G', latency: 800, jitterMs: 200, downloadKbps: 150, uploadKbps: 80, scopes: { replay: true, mock: false, page: false }, enabled: false },
-      { id: 'thr_slow_3g', name: 'Slow 3G', latency: 400, jitterMs: 80, downloadKbps: 400, uploadKbps: 400, scopes: { replay: true, mock: false, page: false }, enabled: false },
-      { id: 'thr_fast_3g', name: 'Fast 3G', latency: 150, jitterMs: 40, downloadKbps: 1600, uploadKbps: 750, scopes: { replay: true, mock: false, page: false }, enabled: false },
-      { id: 'thr_4g', name: '4G', latency: 80, jitterMs: 20, downloadKbps: 9000, uploadKbps: 9000, scopes: { replay: true, mock: false, page: false }, enabled: false }
+      { id: 'thr_2g', name: '2G', latency: 800, jitterMs: 200, downloadKbps: 150, uploadKbps: 80, scopes: { replay: true, page: true }, enabled: false },
+      { id: 'thr_slow_3g', name: 'Slow 3G', latency: 400, jitterMs: 80, downloadKbps: 400, uploadKbps: 400, scopes: { replay: true, page: true }, enabled: false },
+      { id: 'thr_fast_3g', name: 'Fast 3G', latency: 150, jitterMs: 40, downloadKbps: 1600, uploadKbps: 750, scopes: { replay: true, page: true }, enabled: false },
+      { id: 'thr_4g', name: '4G', latency: 80, jitterMs: 20, downloadKbps: 9000, uploadKbps: 9000, scopes: { replay: true, page: true }, enabled: false }
     ];
   }
 
-  function mergeDefaultThrottleProfiles(profiles) {
+  function mergeDefaultThrottleProfiles(profiles, migrateDefaultPageScope) {
     var list = Array.isArray(profiles) && profiles.length ? profiles.slice() : [];
+    var defaults = defaultThrottleProfiles();
+    var defaultMap = {};
+    defaults.forEach(function(item) { defaultMap[item.id] = item; });
+    if (migrateDefaultPageScope) {
+      list = list.map(function(item) {
+        if (!item || !defaultMap[item.id]) return item;
+        var scopes = normalizeThrottleScopes(item.scopes);
+        return Object.assign({}, item, {
+          scopes: Object.assign({}, scopes, { replay: true, page: true })
+        });
+      });
+    }
     var seen = {};
     list.forEach(function(item) {
       if (item && item.id) seen[item.id] = true;
     });
-    defaultThrottleProfiles().slice().reverse().forEach(function(item) {
+    defaults.slice().reverse().forEach(function(item) {
       if (!seen[item.id]) list.unshift(item);
     });
     return list;
@@ -3816,7 +5281,7 @@
     profile = profile || {};
     return {
       id: profile.id || ('thr_' + Date.now() + '_' + random(6)),
-      name: profile.name || '未命名预设',
+      name: profile.name || tt('未命名预设', 'Unnamed profile'),
       latency: nonNegativeNumber(profile.latency),
       jitterMs: nonNegativeNumber(profile.jitterMs),
       downloadKbps: nonNegativeNumber(profile.downloadKbps),
@@ -3830,15 +5295,14 @@
     scopes = scopes || {};
     return {
       replay: scopes.replay !== false,
-      mock: scopes.mock === true,
-      page: scopes.page === true
+      page: scopes.page !== false || scopes.mock === true
     };
   }
 
   function renderThrottleTab() {
     if (!throttleList) return;
     var active = throttleProfiles.find(function(item) { return item.id === activeThrottleProfileId; });
-    if (throttleStatusBadge) throttleStatusBadge.textContent = active ? ('当前: ' + active.name) : '未启用弱网';
+    if (throttleStatusBadge) throttleStatusBadge.textContent = active ? t('throttle.active', { name: active.name, scopes: formatThrottleScopes(active.scopes) }) : t('throttle.noActive');
     if (throttleTabStatusDot) throttleTabStatusDot.classList.toggle('show', !!active);
     if (throttleProfiles.length === 0) {
       throttleList.innerHTML = '';
@@ -3854,13 +5318,13 @@
       var isActive = item.id === activeThrottleProfileId;
       return '<div class="config-item' + (item.id === selectedThrottleId ? ' active' : '') + '" data-throttle-id="' + escAttr(item.id) + '">' +
         '<div class="config-item-top">' +
-          '<span class="config-item-name">' + escHtml(item.name || '未命名预设') + '</span>' +
-          '<span class="config-item-state' + (isActive ? ' enabled' : '') + '">' + (isActive ? '当前使用' : '未使用') + '</span>' +
+          '<span class="config-item-name">' + escHtml(item.name || tt('未命名预设', 'Unnamed profile')) + '</span>' +
+          '<span class="config-item-state' + (isActive ? ' enabled' : '') + '">' + escHtml(isActive ? t('throttle.currentUse') : t('throttle.notUse')) + '</span>' +
         '</div>' +
         '<div class="config-item-meta">' +
           '<div>' + escHtml(throttleLatencyText(item)) + '</div>' +
-          '<div>下行 ' + escHtml(String(item.downloadKbps || 0)) + ' kbps · 上行 ' + escHtml(String(item.uploadKbps || 0)) + ' kbps</div>' +
-          '<div>作用域 ' + escHtml(formatThrottleScopes(item.scopes)) + '</div>' +
+          '<div>' + escHtml(t('throttle.down') + ' ' + String(item.downloadKbps || 0) + ' kbps · ' + t('throttle.up') + ' ' + String(item.uploadKbps || 0) + ' kbps') + '</div>' +
+          '<div>' + escHtml(t('throttle.scope') + ' ' + formatThrottleScopes(item.scopes)) + '</div>' +
         '</div>' +
       '</div>';
     }).join('');
@@ -3873,17 +5337,17 @@
     selectedThrottleId = id;
     if (throttleDetailEmpty) throttleDetailEmpty.style.display = 'none';
     if (throttleDetailContent) throttleDetailContent.style.display = 'block';
-    setText('throttleDetailName', entry.name || '未命名预设');
+    setText('throttleDetailName', entry.name || tt('未命名预设', 'Unnamed profile'));
     setText('throttleDetailLatency', String(entry.latency || 0) + ' ms');
     setText('throttleDetailJitter', String(entry.jitterMs || 0) + ' ms');
     setText('throttleDetailDown', String(entry.downloadKbps || 0) + ' kbps');
     setText('throttleDetailUp', String(entry.uploadKbps || 0) + ' kbps');
     setText('throttleDetailScopes', formatThrottleScopes(entry.scopes));
-    setText('throttleDetailStatus', entry.id === activeThrottleProfileId ? '当前启用' : '未启用');
+    setText('throttleDetailStatus', entry.id === activeThrottleProfileId ? t('throttle.currentEnabled') : t('throttle.disabled'));
     setText('throttleDetailPreview', buildThrottlePreview(entry));
     syncThrottleScopeControls(entry);
     if (throttleDetailStatus) throttleDetailStatus.className = 'value ' + (entry.id === activeThrottleProfileId ? 'config-status-active' : 'config-status-inactive');
-    if (applyThrottleBtn) applyThrottleBtn.textContent = entry.id === activeThrottleProfileId ? '取消当前预设' : '设为当前预设';
+    if (applyThrottleBtn) applyThrottleBtn.textContent = entry.id === activeThrottleProfileId ? t('throttle.unapply') : t('throttle.apply');
     throttleList.querySelectorAll('.config-item').forEach(function(node) {
       node.classList.toggle('active', node.dataset.throttleId === id);
     });
@@ -3891,28 +5355,27 @@
 
   function buildThrottlePreview(entry) {
     return [
-      '名称: ' + (entry.name || ''),
-      '延迟: ' + (entry.latency || 0) + ' ms',
-      '抖动: ±' + (entry.jitterMs || 0) + ' ms',
-      '下行: ' + (entry.downloadKbps || 0) + ' kbps',
-      '上行: ' + (entry.uploadKbps || 0) + ' kbps',
-      '作用域: ' + formatThrottleScopes(entry.scopes),
+      t('throttle.name') + ': ' + (entry.name || ''),
+      t('throttle.latency') + ': ' + (entry.latency || 0) + ' ms',
+      t('throttle.jitter') + ': ±' + (entry.jitterMs || 0) + ' ms',
+      t('throttle.down') + ': ' + (entry.downloadKbps || 0) + ' kbps',
+      t('throttle.up') + ': ' + (entry.uploadKbps || 0) + ' kbps',
+      t('throttle.scope') + ': ' + formatThrottleScopes(entry.scopes),
       '',
-      '启用的作用域会模拟延迟/抖动和上下行传输耗时。'
+      tt('启用的作用域会模拟延迟/抖动和上下行传输耗时。', 'Enabled scopes simulate delay, jitter, upload time, and download time.')
     ].join('\n');
   }
 
   function throttleLatencyText(entry) {
-    return '延迟 ' + (entry.latency || 0) + ' ms' + ((entry.jitterMs || 0) ? ' ±' + entry.jitterMs + ' ms' : '');
+    return t('throttle.latency') + ' ' + (entry.latency || 0) + ' ms' + ((entry.jitterMs || 0) ? ' ±' + entry.jitterMs + ' ms' : '');
   }
 
   function formatThrottleScopes(scopes) {
     scopes = normalizeThrottleScopes(scopes);
     var labels = [];
     if (scopes.replay) labels.push('Replay');
-    if (scopes.mock) labels.push('Mock 命中接口');
-    if (scopes.page) labels.push('页面全局');
-    return labels.length ? labels.join(' / ') : '未启用';
+    if (scopes.page) labels.push(t('throttle.pageScope'));
+    return labels.length ? labels.join(' / ') : t('throttle.disabled');
   }
 
   function helpLabel(text, tip) {
@@ -3926,7 +5389,6 @@
   function syncThrottleScopeControls(entry) {
     var scopes = normalizeThrottleScopes(entry && entry.scopes);
     if (throttleScopeReplay) throttleScopeReplay.checked = !!scopes.replay;
-    if (throttleScopeMock) throttleScopeMock.checked = !!scopes.mock;
     if (throttleScopePage) throttleScopePage.checked = !!scopes.page;
   }
 
@@ -3935,11 +5397,10 @@
     if (!entry) return;
     entry.scopes = normalizeThrottleScopes({
       replay: throttleScopeReplay ? throttleScopeReplay.checked : true,
-      mock: throttleScopeMock ? throttleScopeMock.checked : false,
       page: throttleScopePage ? throttleScopePage.checked : false
     });
     persistThrottleProfiles();
-    showToast('弱网作用域已更新');
+    showToast(tt('弱网作用域已更新', 'Throttle scope updated'));
   }
 
   function showConfigModal(mode, entry) {
@@ -3947,26 +5408,25 @@
     configEditingId = entry && entry.id ? entry.id : '';
     if (!configModalOverlay || !configModalBody) return;
     if (mode === 'throttle') {
-      configModalTitle.textContent = entry ? '编辑弱网预设' : '新建弱网预设';
+      configModalTitle.textContent = entry ? tt('编辑弱网预设', 'Edit throttle profile') : tt('新建弱网预设', 'New throttle profile');
       var scopes = normalizeThrottleScopes(entry && entry.scopes);
       configModalBody.innerHTML =
         '<div class="config-form">' +
-          '<label class="config-form-label">' + helpLabel('名称', '给这套弱网参数起个容易识别的名字，比如“地铁弱网”或“海外接口慢网”。') + '<input class="form-input" id="cfgThrottleName" value="' + escAttr((entry && entry.name) || '') + '" placeholder="比如: 测试弱网 1"></label>' +
+          '<label class="config-form-label">' + helpLabel(t('throttle.name'), tt('给这套弱网参数起个容易识别的名字，比如“地铁弱网”或“海外接口慢网”。', 'Give this throttle profile a recognizable name, such as Subway weak network or Overseas slow API.')) + '<input class="form-input" id="cfgThrottleName" value="' + escAttr((entry && entry.name) || '') + '" placeholder="' + escAttr(tt('比如: 测试弱网 1', 'e.g. Slow network 1')) + '"></label>' +
           '<div class="config-form-grid">' +
-            '<label class="config-form-label">' + helpLabel('延迟 (ms)', '每个请求固定多等多久再发送。1000 ms 等于 1 秒；想模拟“接口慢”，可以先填 500-2000。填 0 表示不加固定延迟。') + '<input class="form-input" id="cfgThrottleLatency" type="number" min="0" value="' + escAttr(String((entry && entry.latency) || 0)) + '"></label>' +
-            '<label class="config-form-label">' + helpLabel('抖动 (±ms)', '设置：延迟 = 1000 ms、抖动 = 300 ms。每次请求不会都固定等 1000 ms，而是大概在这个范围里随机：700 ms ~ 1300 ms。') + '<input class="form-input" id="cfgThrottleJitter" type="number" min="0" value="' + escAttr(String((entry && entry.jitterMs) || 0)) + '"></label>' +
+            '<label class="config-form-label">' + helpLabel(t('throttle.latency') + ' (ms)', tt('每个请求固定多等多久再发送。1000 ms 等于 1 秒；想模拟“接口慢”，可以先填 500-2000。填 0 表示不加固定延迟。', 'How long each request waits before sending. 1000 ms equals 1 second. Use 500-2000 to simulate a slow API. 0 disables fixed latency.')) + '<input class="form-input" id="cfgThrottleLatency" type="number" min="0" value="' + escAttr(String((entry && entry.latency) || 0)) + '"></label>' +
+            '<label class="config-form-label">' + helpLabel(t('throttle.jitter') + ' (±ms)', tt('设置：延迟 = 1000 ms、抖动 = 300 ms。每次请求不会都固定等 1000 ms，而是大概在这个范围里随机：700 ms ~ 1300 ms。', 'Example: latency = 1000 ms, jitter = 300 ms. Each request waits randomly around 700 ms to 1300 ms instead of a fixed 1000 ms.')) + '<input class="form-input" id="cfgThrottleJitter" type="number" min="0" value="' + escAttr(String((entry && entry.jitterMs) || 0)) + '"></label>' +
           '</div>' +
           '<div class="config-form-grid">' +
-            '<label class="config-form-label">' + helpLabel('下行 (kbps)', '下载速度，也就是接口响应回来的速度。数值越小越慢；400 像慢 3G，1600 像较快 3G。填 0 表示不限制。') + '<input class="form-input" id="cfgThrottleDown" type="number" min="0" value="' + escAttr(String((entry && entry.downloadKbps) || 0)) + '"></label>' +
-            '<label class="config-form-label">' + helpLabel('上行 (kbps)', '上传速度，也就是请求体发出去的速度。上传图片、表单、大 JSON 时会明显。填 0 表示不限制。') + '<input class="form-input" id="cfgThrottleUp" type="number" min="0" value="' + escAttr(String((entry && entry.uploadKbps) || 0)) + '"></label>' +
+            '<label class="config-form-label">' + helpLabel(t('throttle.down') + ' (kbps)', tt('下载速度，也就是接口响应回来的速度。数值越小越慢；400 像慢 3G，1600 像较快 3G。填 0 表示不限制。', 'Download speed, meaning how fast the API response comes back. Lower is slower. 400 feels like slow 3G, 1600 like faster 3G. 0 disables the limit.')) + '<input class="form-input" id="cfgThrottleDown" type="number" min="0" value="' + escAttr(String((entry && entry.downloadKbps) || 0)) + '"></label>' +
+            '<label class="config-form-label">' + helpLabel(t('throttle.up') + ' (kbps)', tt('上传速度，也就是请求体发出去的速度。上传图片、表单、大 JSON 时会明显。填 0 表示不限制。', 'Upload speed, meaning how fast the request body is sent. This is noticeable for images, forms, or large JSON. 0 disables the limit.')) + '<input class="form-input" id="cfgThrottleUp" type="number" min="0" value="' + escAttr(String((entry && entry.uploadKbps) || 0)) + '"></label>' +
           '</div>' +
           '<div class="config-scope-box">' +
-            '<div class="config-scope-title">' + helpLabel('作用域', '决定这套弱网参数影响哪里。建议默认只开 Replay；只有要验证 Mock 接口或整页请求时，再打开对应开关。') + '</div>' +
-            '<div class="config-scope-toggle"><span><strong>Replay ' + helpIcon('只影响 Replay 页面的“发送请求”。适合安全地调试单个接口，不会干扰当前网页其它请求。') + '</strong><em>仅影响 Replay 页面的重发请求</em></span><label class="toggle"><input type="checkbox" id="cfgThrottleScopeReplay"' + (scopes.replay ? ' checked' : '') + '><span class="toggle-slider"></span></label></div>' +
-            '<div class="config-scope-toggle"><span><strong>Mock ' + helpIcon('只影响已经命中 Mock 规则的接口。适合测试“接口被 Mock 后仍然很慢”的前端表现。') + '</strong><em>仅影响命中 Mock 规则的接口</em></span><label class="toggle"><input type="checkbox" id="cfgThrottleScopeMock"' + (scopes.mock ? ' checked' : '') + '><span class="toggle-slider"></span></label></div>' +
-            '<div class="config-scope-toggle"><span><strong>页面全局 ' + helpIcon('影响当前页面脚本发起的 fetch/XHR 接口请求。不会拦截地址栏跳转、普通表单提交、图片、脚本、文档导航等浏览器资源请求。') + '</strong><em>仅影响当前页面的 fetch / XHR 接口</em></span><label class="toggle"><input type="checkbox" id="cfgThrottleScopePage"' + (scopes.page ? ' checked' : '') + '><span class="toggle-slider"></span></label></div>' +
+            '<div class="config-scope-title">' + helpLabel(t('throttle.scope'), tt('决定这套弱网参数影响哪里。建议默认只开 Replay；只有要验证当前页面请求时，再打开页面全局。', 'Controls where this throttle profile applies. Replay is safer by default; enable Page global only when validating current page requests.')) + '</div>' +
+            '<div class="config-scope-toggle"><span><strong>Replay ' + helpIcon(tt('只影响 Replay 页面的“发送请求”。适合安全地调试单个接口，不会干扰当前网页其它请求。', 'Only affects Send request in Replay. Good for safely debugging a single API without affecting other page requests.')) + '</strong><em>' + escHtml(t('throttle.replayScopeHint')) + '</em></span><label class="toggle"><input type="checkbox" id="cfgThrottleScopeReplay"' + (scopes.replay ? ' checked' : '') + '><span class="toggle-slider"></span></label></div>' +
+            '<div class="config-scope-toggle"><span><strong>' + escHtml(t('throttle.pageScope')) + ' ' + helpIcon(tt('影响当前页面脚本发起的 fetch/XHR 接口请求。不会拦截地址栏跳转、普通表单提交、图片、脚本、文档导航等浏览器资源请求。', 'Affects fetch/XHR requests made by the current page scripts. It does not intercept address-bar navigation, normal form posts, images, scripts, or document navigation.')) + '</strong><em>' + escHtml(t('throttle.pageScopeHint')) + '</em></span><label class="toggle"><input type="checkbox" id="cfgThrottleScopePage"' + (scopes.page ? ' checked' : '') + '><span class="toggle-slider"></span></label></div>' +
           '</div>' +
-          '<div class="config-hint">0 表示不启用该项。页面全局只影响 fetch/XHR 接口，不会影响普通页面跳转或表单搜索。</div>' +
+          '<div class="config-hint">' + escHtml(tt('0 表示不启用该项。页面全局只影响 fetch/XHR 接口，不会影响普通页面跳转或表单搜索。', '0 disables that item. Page global only affects fetch/XHR APIs, not normal page navigation or form searches.')) + '</div>' +
         '</div>';
     }
     configModalOverlay.classList.add('active');
@@ -3982,22 +5442,22 @@
     if (configModalMode === 'throttle') {
       var profile = {
         id: configEditingId || ('thr_' + Date.now() + '_' + random(6)),
-        name: (($('cfgThrottleName') || {}).value || '').trim() || '未命名预设',
+        name: (($('cfgThrottleName') || {}).value || '').trim() || tt('未命名预设', 'Unnamed profile'),
         latency: Math.max(0, Number((($('cfgThrottleLatency') || {}).value || 0))),
         jitterMs: Math.max(0, Number((($('cfgThrottleJitter') || {}).value || 0))),
         downloadKbps: Math.max(0, Number((($('cfgThrottleDown') || {}).value || 0))),
         uploadKbps: Math.max(0, Number((($('cfgThrottleUp') || {}).value || 0))),
         scopes: {
           replay: !!(($('cfgThrottleScopeReplay') || {}).checked),
-          mock: !!(($('cfgThrottleScopeMock') || {}).checked),
           page: !!(($('cfgThrottleScopePage') || {}).checked)
         }
       };
       upsertById(throttleProfiles, normalizeThrottleProfile(profile));
       selectedThrottleId = profile.id;
+      activeThrottleProfileId = profile.id;
       persistThrottleProfiles();
       hideConfigModal();
-      showToast('弱网预设已保存');
+      showToast(profile.scopes.page ? tt('弱网预设已保存并启用', 'Throttle profile saved and enabled') : tt('弱网预设已保存并启用；页面验证需打开页面全局', 'Throttle profile saved and enabled. Enable Page global to verify page requests.'));
     }
   }
 
@@ -4137,7 +5597,7 @@
   }
 
   function truncateUrl(url) {
-    if (!url) return '(未设置)';
+    if (!url) return t('common.notSet');
     try {
       var u = new URL(url);
       return u.pathname + u.search;
@@ -4313,7 +5773,7 @@
 
   function formatHeaders(headers) {
     var keys = Object.keys(headers);
-    if (keys.length === 0) return '(无)';
+    if (keys.length === 0) return t('common.empty');
     return keys.map(function(k) { return k + ': ' + headers[k]; }).join('\n');
   }
 
@@ -4361,14 +5821,14 @@
   }
 
   function formatCookieLines(cookies) {
-    if (!cookies || cookies.length === 0) return '无';
+    if (!cookies || cookies.length === 0) return t('common.empty');
     return cookies.map(function(item) {
       return item.name + '=' + item.value;
     }).join('\n');
   }
 
   function formatSetCookieLines(cookies) {
-    if (!cookies || cookies.length === 0) return '无';
+    if (!cookies || cookies.length === 0) return t('common.empty');
     return cookies.map(function(item) {
       return item.raw || (item.name + '=' + item.value);
     }).join('\n');
@@ -4384,35 +5844,35 @@
     if (body) {
       req.responseBodyState = isBinary ? 'binary' : 'text';
       req.responseBodyMessage = isBinary
-        ? '该响应是二进制资源，当前展示的是编码后的原始内容。'
+        ? tt('该响应是二进制资源，当前展示的是编码后的原始内容。', 'This is a binary response. Showing the encoded raw content.')
         : '';
       return;
     }
 
     if (contentLength === 0 || req.status === 204 || req.method === 'HEAD') {
       req.responseBodyState = 'empty';
-      req.responseBodyMessage = '该请求没有可返回的响应体。';
+      req.responseBodyMessage = tt('该请求没有可返回的响应体。', 'This request has no response body.');
       return;
     }
 
     if (isBinary) {
       req.responseBodyState = 'binary-unavailable';
-      req.responseBodyMessage = '该响应是图片或其他二进制资源，浏览器这次没有返回可预览的内容。';
+      req.responseBodyMessage = tt('该响应是图片或其他二进制资源，浏览器这次没有返回可预览的内容。', 'This response is an image or other binary resource, and the browser did not provide previewable content this time.');
       return;
     }
 
     if (isStreamingLike(req, mimeType)) {
       req.responseBodyState = 'stream-unavailable';
-      req.responseBodyMessage = '该请求更像流式或特殊接口，浏览器未提供完整响应体。';
+      req.responseBodyMessage = tt('该请求更像流式或特殊接口，浏览器未提供完整响应体。', 'This looks like a streaming or special endpoint, and the browser did not provide the full response body.');
       return;
     }
 
     req.responseBodyState = 'unavailable';
-    req.responseBodyMessage = '浏览器没有返回这条请求的响应体，通常是受资源类型、跨域策略或 DevTools 能力限制影响。';
+    req.responseBodyMessage = tt('浏览器没有返回这条请求的响应体，通常是受资源类型、跨域策略或 DevTools 能力限制影响。', 'The browser did not return the response body, usually because of resource type, CORS policy, or DevTools capability limits.');
   }
 
   function formatResponseBodyDisplay(req, mimeType) {
-    if (!req) return '(空)';
+    if (!req) return t('common.emptyText');
     var state = req.responseBodyState || '';
     if (req.responseContent) {
       if (state === 'binary' || req.responseEncoding === 'base64') {
@@ -4420,9 +5880,9 @@
       }
       return formatBody(req.responseContent, mimeType);
     }
-    if (state === 'pending') return '响应体获取中...';
-    if (state === 'empty') return req.responseBodyMessage || '(空)';
-    return req.responseBodyMessage || '(未获取到响应体)';
+    if (state === 'pending') return tt('响应体获取中...', 'Fetching response body...');
+    if (state === 'empty') return req.responseBodyMessage || t('common.emptyText');
+    return req.responseBodyMessage || tt('(未获取到响应体)', '(Response body not available)');
   }
 
   function buildMediaPreview(req, mimeType) {
@@ -4435,30 +5895,31 @@
     if (!previewSrc && openUrl) {
       previewSrc = openUrl;
       note = mediaKind === 'video' || mediaKind === 'audio'
-        ? '当前直接使用原始资源地址预览，适合较大的媒体文件。'
-        : '当前直接使用原始资源地址预览。';
+        ? tt('当前直接使用原始资源地址预览，适合较大的媒体文件。', 'Previewing directly from the original resource URL, which is better for large media files.')
+        : tt('当前直接使用原始资源地址预览。', 'Previewing directly from the original resource URL.');
     }
     if (!previewSrc) return '';
 
     var mediaHtml = '';
     if (mediaKind === 'image') {
-      mediaHtml = '<img class="response-preview-image" src="' + escAttr(previewSrc) + '" alt="响应图片预览">';
+      mediaHtml = '<img class="response-preview-image" src="' + escAttr(previewSrc) + '" alt="' + escAttr(tt('响应图片预览', 'Response image preview')) + '">';
     } else if (mediaKind === 'video') {
       mediaHtml = '<video class="response-preview-video" controls preload="metadata" src="' + escAttr(previewSrc) + '"></video>';
-      if (!note) note = '如果视频较大或为分片流媒体，播放器可能依赖原始地址继续分段加载。';
+      if (!note) note = tt('如果视频较大或为分片流媒体，播放器可能依赖原始地址继续分段加载。', 'For large or segmented video streams, the player may keep loading chunks from the original URL.');
     } else if (mediaKind === 'audio') {
       mediaHtml = '<audio class="response-preview-audio" controls preload="metadata" src="' + escAttr(previewSrc) + '"></audio>';
-      if (!note) note = '音频资源会优先尝试直接播放。';
+      if (!note) note = tt('音频资源会优先尝试直接播放。', 'Audio resources are previewed with direct playback when possible.');
     }
 
-    var sourceLabel = req.responseEncoding === 'base64' && req.responseContent ? 'base64 响应体' : '原始资源地址';
+    var sourceLabel = req.responseEncoding === 'base64' && req.responseContent ? tt('base64 响应体', 'base64 response body') : tt('原始资源地址', 'original resource URL');
+    var mediaKindLabel = mediaKind === 'image' ? tt('图片', 'image') : (mediaKind === 'video' ? tt('视频', 'video') : tt('音频', 'audio'));
     var parts = [
       '<div class="response-preview">',
-      '<div class="response-preview-meta">已识别为' + escHtml(mediaKind === 'image' ? '图片' : (mediaKind === 'video' ? '视频' : '音频')) + '资源，当前使用 ' + escHtml(sourceLabel) + ' 预览。</div>',
+      '<div class="response-preview-meta">' + escHtml(tt('已识别为{kind}资源，当前使用 {source} 预览。', 'Detected a {kind} resource. Previewing with {source}.', { kind: mediaKindLabel, source: sourceLabel })) + '</div>',
       mediaHtml,
       '<div class="response-preview-actions">' +
-        '<a class="response-preview-link" href="' + escAttr(openUrl || previewSrc) + '" target="_blank" rel="noopener noreferrer">打开资源</a>' +
-        '<button type="button" class="response-preview-link copy-resource-url" data-url="' + escAttr(openUrl || previewSrc) + '">复制地址</button>' +
+        '<a class="response-preview-link" href="' + escAttr(openUrl || previewSrc) + '" target="_blank" rel="noopener noreferrer">' + escHtml(tt('打开资源', 'Open resource')) + '</a>' +
+        '<button type="button" class="response-preview-link copy-resource-url" data-url="' + escAttr(openUrl || previewSrc) + '">' + escHtml(tt('复制地址', 'Copy URL')) + '</button>' +
       '</div>'
     ];
     if (note) parts.push('<div class="response-preview-note">' + escHtml(note) + '</div>');
@@ -4490,7 +5951,7 @@
 
   function formatBinaryBody(req) {
     var lines = [
-      '[二进制响应]'
+      tt('[二进制响应]', '[Binary response]')
     ];
     if (req.mimeType) lines.push('Content-Type: ' + req.mimeType);
     if (req.responseEncoding) lines.push('Encoding: ' + req.responseEncoding);
@@ -4515,14 +5976,14 @@
   }
 
   function copyTextValue(text, successMessage) {
-    if (!text || text === '无') {
-      showToast('当前没有可复制的数据', 'error');
+    if (!text || text === t('common.empty') || text === '无') {
+      showToast(tt('当前没有可复制的数据', 'Nothing to copy'), 'error');
       return;
     }
-    navigator.clipboard.writeText(text).then(function() {
+    ApiStudioCompat.copyText(text).then(function() {
       showToast(successMessage);
     }).catch(function(error) {
-      showToast('复制失败: ' + error.message, 'error');
+      showToast(tt('复制失败: {message}', 'Copy failed: {message}', { message: error.message }), 'error');
     });
   }
 
@@ -4558,7 +6019,7 @@
   }
 
   function formatBody(body, mimeType) {
-    if (!body) return '(空)';
+    if (!body) return t('common.emptyText');
     if (mimeType && mimeType.indexOf('json') !== -1) {
       try { return JSON.stringify(JSON.parse(body), null, 2); } catch(e) { return body; }
     }
@@ -4622,17 +6083,17 @@
       overlay.innerHTML =
         '<div class="app-dialog" role="dialog" aria-modal="true">' +
           '<div class="app-dialog-header">' +
-            '<div class="app-dialog-title">' + escHtml(options.title || '提示') + '</div>' +
-            '<button class="app-dialog-close" type="button" aria-label="关闭">×</button>' +
+            '<div class="app-dialog-title">' + escHtml(options.title || tt('提示', 'Notice')) + '</div>' +
+            '<button class="app-dialog-close" type="button" aria-label="' + escAttr(tt('关闭', 'Close')) + '">×</button>' +
           '</div>' +
           '<div class="app-dialog-body">' +
             '<div>' + escHtml(options.message || '') + '</div>' +
             (hasInput ? '<input class="app-dialog-input" type="text" value="' + escAttr(options.defaultValue || '') + '">' : '') +
-            (hasSelect ? '<input class="app-dialog-input app-dialog-search" type="text" placeholder="搜索分组..." value=""><div class="app-dialog-options"></div>' : '') +
+            (hasSelect ? '<input class="app-dialog-input app-dialog-search" type="text" placeholder="' + escAttr(tt('搜索分组...', 'Search groups...')) + '" value=""><div class="app-dialog-options"></div>' : '') +
           '</div>' +
           '<div class="app-dialog-footer">' +
-            (options.type === 'alert' ? '' : '<button class="btn btn-secondary app-dialog-cancel" type="button">取消</button>') +
-            '<button class="btn btn-primary app-dialog-ok" type="button">' + escHtml(options.okText || '确定') + '</button>' +
+            (options.type === 'alert' ? '' : '<button class="btn btn-secondary app-dialog-cancel" type="button">' + escHtml(tt('取消', 'Cancel')) + '</button>') +
+            '<button class="btn btn-primary app-dialog-ok" type="button">' + escHtml(options.okText || t('common.confirm')) + '</button>' +
           '</div>' +
         '</div>';
 
@@ -4658,7 +6119,7 @@
         var list = filteredSelectOptions();
         if (list.indexOf(selectedValue) === -1) selectedValue = list[0] || '';
         if (list.length === 0) {
-          optionsBox.innerHTML = '<div class="app-dialog-option-empty">没有匹配的分组</div>';
+          optionsBox.innerHTML = '<div class="app-dialog-option-empty">' + escHtml(tt('没有匹配的分组', 'No matching groups')) + '</div>';
           return;
         }
         optionsBox.innerHTML = list.map(function(item) {
@@ -4733,26 +6194,27 @@
   }
 
   function appConfirm(title, message, okText) {
-    return showAppDialog({ type: 'confirm', title: title, message: message, okText: okText || '确定' });
+    return showAppDialog({ type: 'confirm', title: title, message: message, okText: okText || t('common.confirm') });
   }
 
   function appPrompt(title, message, defaultValue) {
-    return showAppDialog({ type: 'prompt', title: title, message: message, defaultValue: defaultValue || '', okText: '确定' });
+    return showAppDialog({ type: 'prompt', title: title, message: message, defaultValue: defaultValue || '', okText: t('common.confirm') });
   }
 
   function appSelect(title, message, options, okText) {
-    return showAppDialog({ type: 'select', title: title, message: message, options: options || [], okText: okText || '转移' });
+    return showAppDialog({ type: 'select', title: title, message: message, options: options || [], okText: okText || t('common.move') });
   }
 
   // ======================================================================
   // INIT
   // ======================================================================
 
+  applyLocale();
   loadRules();        // Load mock rules
   chrome.storage.local.get('masterEnabled', function(result) {
     var enabled = result.masterEnabled !== false;
     if (masterToggle) masterToggle.checked = enabled;
-    if (masterToggleText) masterToggleText.textContent = enabled ? '开启' : '关闭';
+    if (masterToggleText) masterToggleText.textContent = enabled ? t('mock.on') : t('mock.off');
     updateMockTabStatus(enabled);
   });
   loadThrottleProfiles();
@@ -4764,6 +6226,7 @@
   restoreReplaySplit();
   renderBeaconTab();
   renderCookiesTab();
+  renderReplayBodyEditor({ forceRows: true });
   renderReplayHistory();
   renderNetworkList(); // Render network tab (empty initially)
   updateBadge();

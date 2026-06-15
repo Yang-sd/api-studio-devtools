@@ -43,7 +43,7 @@
   .analytics-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
   .analytics-head h2 { font-size: 1rem; color: #172b4d; margin-bottom: 0.25rem; }
   .analytics-head p { color: #5e6c84; font-size: 0.8rem; line-height: 1.45; }
-  .analytics-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.5rem; margin-bottom: 0.75rem; }
+  .analytics-actions { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.5rem; margin-bottom: 0.75rem; }
   .analytics-actions button { min-height: 38px; padding: 0.5rem 0.75rem; border: none; border-radius: 4px; color: #fff; font-size: 0.84rem; font-weight: 600; cursor: pointer; transition: filter 0.15s, transform 0.1s; }
   .analytics-actions button:hover { filter: brightness(1.06); }
   .analytics-actions button:active { transform: scale(0.98); }
@@ -51,6 +51,7 @@
   .btn-track-b { background: #00875a; }
   .btn-track-c { background: #6554c0; }
   .btn-track-d { background: #ff991f; color: #172b4d !important; }
+  .btn-track-e { background: #00b8d9; color: #172b4d !important; }
   .analytics-log { display: grid; grid-template-columns: 150px 1fr; gap: 0.75rem; align-items: stretch; }
   .analytics-counter { background: #f4f5f7; border-radius: 6px; padding: 0.75rem; }
   .analytics-counter span { display: block; color: #5e6c84; font-size: 0.75rem; margin-bottom: 0.35rem; }
@@ -59,6 +60,44 @@
   @media (max-width: 720px) {
     .analytics-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .analytics-log { grid-template-columns: 1fr; }
+  }
+
+  /* weak network test bench */
+  .network-panel { background: #fff; border: 1px solid #dfe1e6; border-radius: 8px; margin-bottom: 1rem; padding: 1rem; }
+  .network-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
+  .network-head h2 { font-size: 1rem; color: #172b4d; margin-bottom: 0.25rem; }
+  .network-head p { color: #5e6c84; font-size: 0.8rem; line-height: 1.45; max-width: 620px; }
+  .network-status { display: inline-flex; align-items: center; gap: 0.35rem; min-height: 28px; padding: 0.25rem 0.65rem; border-radius: 999px; background: #ebecf0; color: #42526e; font-size: 0.75rem; font-weight: 700; }
+  .network-status::before { content: ''; width: 7px; height: 7px; border-radius: 999px; background: #7a869a; }
+  .network-status.ready { background: #e3fcef; color: #006644; }
+  .network-status.ready::before { background: #00875a; }
+  .network-status.missing { background: #ffebe6; color: #bf2600; }
+  .network-status.missing::before { background: #de350b; }
+  .network-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.5rem; margin-bottom: 0.75rem; }
+  .network-actions button { min-height: 38px; padding: 0.5rem 0.75rem; border: none; border-radius: 4px; background: #0747a6; color: #fff; font-size: 0.84rem; font-weight: 600; cursor: pointer; transition: filter 0.15s, transform 0.1s; }
+  .network-actions button:hover { filter: brightness(1.06); }
+  .network-actions button:active { transform: scale(0.98); }
+  .network-actions button:nth-child(2) { background: #00875a; }
+  .network-actions button:nth-child(3) { background: #6554c0; }
+  .network-actions button:nth-child(4) { background: #ff991f; color: #172b4d; }
+  .network-result { display: grid; grid-template-columns: 160px 1fr; gap: 0.75rem; }
+  .network-metric { background: #f4f5f7; border-radius: 6px; padding: 0.75rem; }
+  .network-metric span { display: block; color: #5e6c84; font-size: 0.75rem; margin-bottom: 0.35rem; }
+  .network-metric strong { display: block; font-size: 1.65rem; color: #0747a6; line-height: 1.1; }
+  .network-metric em { display: block; color: #7a869a; font-size: 0.72rem; font-style: normal; margin-top: 0.35rem; }
+  .network-output { background: #172b4d; color: #e6fcff; border-radius: 6px; padding: 0.75rem; min-height: 98px; overflow: auto; font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; font-size: 0.75rem; line-height: 1.5; white-space: pre-wrap; }
+  .upload-panel { display: grid; grid-template-columns: 1.2fr 1fr auto; gap: 0.75rem; align-items: end; margin-bottom: 0.75rem; }
+  .upload-field { display: flex; flex-direction: column; gap: 0.35rem; }
+  .upload-field label { font-size: 0.78rem; font-weight: 600; color: #5e6c84; }
+  .upload-field input { width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #dfe1e6; border-radius: 4px; font-size: 0.875rem; }
+  .upload-panel button { min-height: 38px; padding: 0.5rem 0.9rem; border: none; border-radius: 4px; background: #0747a6; color: #fff; font-size: 0.84rem; font-weight: 600; cursor: pointer; transition: filter 0.15s, transform 0.1s; }
+  .upload-panel button:hover { filter: brightness(1.06); }
+  .upload-panel button:active { transform: scale(0.98); }
+  .network-note { margin-top: 0.65rem; color: #6b778c; font-size: 0.78rem; line-height: 1.5; }
+  @media (max-width: 720px) {
+    .network-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .network-result { grid-template-columns: 1fr; }
+    .upload-panel { grid-template-columns: 1fr; }
   }
 
   /* table */
@@ -125,6 +164,60 @@
     <button class="btn-secondary" onclick="loadTasks()">刷新</button>
   </div>
 
+  <section class="network-panel" aria-label="弱网验证台">
+    <div class="network-head">
+      <div>
+        <h2>弱网验证台</h2>
+        <p>用于验证插件 Throttle 是否真的生效。请在插件里启用一个弱网预设，并打开「页面全局」作用域；这里统计的是从页面发起请求到拿到结果的总耗时。</p>
+      </div>
+      <span class="network-status" id="networkInjectStatus">检测插件注入中...</span>
+    </div>
+    <div class="network-actions">
+      <button onclick="runNetworkProbe('latency')">Fetch 延迟验证</button>
+      <button onclick="runNetworkProbe('download')">大响应下行验证</button>
+      <button onclick="runNetworkProbe('upload')">大请求上行验证</button>
+      <button onclick="runNetworkXhrProbe()">XHR 延迟验证</button>
+    </div>
+    <div class="network-result">
+      <div class="network-metric">
+        <span>本次总耗时</span>
+        <strong id="networkElapsed">-</strong>
+        <em id="networkMode">等待测试</em>
+      </div>
+      <pre class="network-output" id="networkOutput">建议测试配置：延迟 2000 ms，抖动 0 ms，下行/上行 0，作用域勾选「页面全局」。点击“Fetch 延迟验证”后，总耗时应接近 2000 ms 以上。</pre>
+    </div>
+    <p class="network-note">注意：浏览器插件只能拦截页面脚本发起的 fetch / XHR，不能影响地址栏跳转、HTML 文档加载、图片、脚本等浏览器底层资源请求。</p>
+  </section>
+
+  <section class="network-panel" aria-label="文件上传验证台">
+    <div class="network-head">
+      <div>
+        <h2>文件上传验证台</h2>
+        <p>用于验证 Replay 里的 <strong>multipart/form-data</strong> 和文件选择是否真的能发出去。发送时不要手动设置 Content-Type，让浏览器自己补 boundary。</p>
+      </div>
+      <span class="network-status" id="uploadStatus">等待上传测试</span>
+    </div>
+    <div class="upload-panel">
+      <div class="upload-field">
+        <label for="uploadTextInput">文本字段</label>
+        <input id="uploadTextInput" type="text" value="demo-text" placeholder="随便填一个文本字段">
+      </div>
+      <div class="upload-field">
+        <label for="uploadFileInput">文件字段</label>
+        <input id="uploadFileInput" type="file">
+      </div>
+      <button onclick="runUploadDemo()">发送 FormData</button>
+    </div>
+    <div class="network-result">
+      <div class="network-metric">
+        <span>本次上传耗时</span>
+        <strong id="uploadElapsed">-</strong>
+        <em id="uploadSummary">等待测试</em>
+      </div>
+      <pre class="network-output" id="uploadOutput">选择一个文件或只发文本字段，然后点“发送 FormData”。响应里会返回 fields 和 files，方便你看 multipart 有没有真正生效。</pre>
+    </div>
+  </section>
+
   <section class="analytics-panel" aria-label="埋点测试台">
     <div class="analytics-head">
       <div>
@@ -138,6 +231,7 @@
       <button class="btn-track-b" data-analytics-button="save_draft" data-scenario="workflow">保存草稿</button>
       <button class="btn-track-c" data-analytics-button="export_report" data-scenario="download">导出报告</button>
       <button class="btn-track-d" data-analytics-button="upgrade_plan" data-scenario="billing">升级套餐</button>
+      <button class="btn-track-e" data-analytics-button="nested_report" data-scenario="nested">复杂嵌套上报</button>
     </div>
     <div class="analytics-log">
       <div class="analytics-counter">
@@ -201,6 +295,7 @@
 let editingId = null;
 let analyticsCount = 0;
 let analyticsSequence = 0;
+let networkProbeSequence = 0;
 const analyticsSessionId = getAnalyticsSessionId();
 
 function toast(msg, type = 'success') {
@@ -236,9 +331,233 @@ function updateAnalyticsOutput(data) {
   document.getElementById('analyticsOutput').textContent = JSON.stringify(data, null, 2);
 }
 
+function queryApiStudioThrottleState() {
+  return new Promise(resolve => {
+    const requestId = 'test_probe_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    const timer = setTimeout(() => {
+      window.removeEventListener('message', onMessage);
+      resolve(null);
+    }, 900);
+
+    function onMessage(event) {
+      if (!event.data || event.data.type !== '__MOCK_EXT_RESULT__' || event.data.requestId !== requestId) return;
+      clearTimeout(timer);
+      window.removeEventListener('message', onMessage);
+      resolve(event.data);
+    }
+
+    window.addEventListener('message', onMessage);
+    window.postMessage({
+      type: '__MOCK_EXT_CHECK__',
+      requestId,
+      url: new URL('/api/network/probe?size=256', window.location.href).href,
+      method: 'GET',
+      body: ''
+    }, '*');
+  });
+}
+
+async function refreshNetworkInjectStatus() {
+  const el = document.getElementById('networkInjectStatus');
+  if (!el) return;
+  const injected = !!window.__API_STUDIO_MOCK_INJECTED__;
+  el.textContent = injected ? '检测页面全局弱网中...' : '未检测到 fetch/XHR 注入';
+  el.className = 'network-status ' + (injected ? '' : 'missing');
+
+  const state = await queryApiStudioThrottleState();
+  if (!state) {
+    el.textContent = injected ? '插件已注入，未收到配置响应' : '未检测到插件注入';
+    el.className = 'network-status missing';
+    return;
+  }
+
+  if (!injected) {
+    el.textContent = '配置通道正常，但 fetch/XHR 未注入';
+    el.className = 'network-status missing';
+    return;
+  }
+
+  if (state.throttle) {
+    el.textContent = '页面全局弱网已启用: ' + (state.throttle.name || '未命名预设');
+    el.className = 'network-status ready';
+  } else {
+    el.textContent = '插件已注入，页面全局未启用';
+    el.className = 'network-status';
+  }
+}
+
+function updateNetworkOutput(data) {
+  document.getElementById('networkOutput').textContent = JSON.stringify(data, null, 2);
+}
+
+function updateUploadOutput(data) {
+  document.getElementById('uploadOutput').textContent = JSON.stringify(data, null, 2);
+}
+
+function setNetworkMetric(elapsedMs, modeText) {
+  document.getElementById('networkElapsed').textContent = elapsedMs == null ? '-' : Math.round(elapsedMs) + ' ms';
+  document.getElementById('networkMode').textContent = modeText || '等待测试';
+}
+
+function setUploadMetric(elapsedMs, summaryText, ok) {
+  document.getElementById('uploadElapsed').textContent = elapsedMs == null ? '-' : Math.round(elapsedMs) + ' ms';
+  document.getElementById('uploadSummary').textContent = summaryText || '等待测试';
+  const status = document.getElementById('uploadStatus');
+  status.textContent = summaryText || '等待上传测试';
+  status.className = 'network-status ' + (ok === true ? 'ready' : ok === false ? 'missing' : '');
+}
+
+function largeText(size) {
+  return 'x'.repeat(size);
+}
+
+async function runNetworkProbe(mode) {
+  const throttleState = await queryApiStudioThrottleState();
+  refreshNetworkInjectStatus();
+  networkProbeSequence += 1;
+  const sizeMap = { latency: 256, download: 256 * 1024, upload: 512 };
+  const modeTextMap = { latency: 'Fetch 小响应', download: 'Fetch 大响应', upload: 'Fetch 大请求体' };
+  const size = sizeMap[mode] || 256;
+  const isUpload = mode === 'upload';
+  const startedAt = performance.now();
+  setNetworkMetric(null, modeTextMap[mode] + ' 请求中...');
+  updateNetworkOutput({ status: 'requesting', mode, sequence: networkProbeSequence });
+
+  try {
+    const response = await fetch('/api/network/probe?size=' + size + '&_=' + Date.now(), {
+      method: isUpload ? 'POST' : 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'X-Network-Probe': mode
+      },
+      body: isUpload ? JSON.stringify({ payload: largeText(128 * 1024), sequence: networkProbeSequence }) : undefined,
+      cache: 'no-store'
+    });
+    const data = await response.json();
+    const elapsedMs = performance.now() - startedAt;
+    setNetworkMetric(elapsedMs, modeTextMap[mode]);
+    updateNetworkOutput({
+      status: response.status,
+      elapsed_ms: Math.round(elapsedMs),
+      mode,
+      injected: !!window.__API_STUDIO_MOCK_INJECTED__,
+      active_throttle: throttleState && throttleState.throttle ? throttleState.throttle.name : null,
+      request_bytes: data.request_bytes,
+      response_bytes: data.response_bytes,
+      server_time: data.server_time
+    });
+    toast('弱网验证完成: ' + Math.round(elapsedMs) + ' ms', 'info');
+  } catch (e) {
+    const elapsedMs = performance.now() - startedAt;
+    setNetworkMetric(elapsedMs, modeTextMap[mode] + ' 失败');
+    updateNetworkOutput({ error: e.message, elapsed_ms: Math.round(elapsedMs), mode });
+    toast('弱网验证失败: ' + e.message, 'error');
+  }
+}
+
+function runNetworkXhrProbe() {
+  refreshNetworkInjectStatus();
+  networkProbeSequence += 1;
+  const startedAt = performance.now();
+  setNetworkMetric(null, 'XHR 小响应请求中...');
+  updateNetworkOutput({ status: 'requesting', mode: 'xhr', sequence: networkProbeSequence });
+
+  const xhr = new XMLHttpRequest();
+  xhr.open('GET', '/api/network/probe?size=256&_=' + Date.now(), true);
+  xhr.setRequestHeader('Accept', 'application/json');
+  xhr.setRequestHeader('X-Network-Probe', 'xhr');
+  xhr.onload = function() {
+    const elapsedMs = performance.now() - startedAt;
+    setNetworkMetric(elapsedMs, 'XHR 小响应');
+    let data = {};
+    try { data = JSON.parse(xhr.responseText || '{}'); } catch (e) {}
+    updateNetworkOutput({
+      status: xhr.status,
+      elapsed_ms: Math.round(elapsedMs),
+      mode: 'xhr',
+      injected: !!window.__API_STUDIO_MOCK_INJECTED__,
+      request_bytes: data.request_bytes,
+      response_bytes: data.response_bytes,
+      server_time: data.server_time
+    });
+    toast('XHR 弱网验证完成: ' + Math.round(elapsedMs) + ' ms', 'info');
+  };
+  xhr.onerror = function() {
+    const elapsedMs = performance.now() - startedAt;
+    setNetworkMetric(elapsedMs, 'XHR 小响应失败');
+    updateNetworkOutput({ error: 'XHR request failed', elapsed_ms: Math.round(elapsedMs), mode: 'xhr' });
+    toast('XHR 弱网验证失败', 'error');
+  };
+  xhr.send();
+}
+
+async function runUploadDemo() {
+  const fileInput = document.getElementById('uploadFileInput');
+  const textInput = document.getElementById('uploadTextInput');
+  const formData = new FormData();
+  formData.append('note', textInput.value || '');
+  formData.append('meta', JSON.stringify({ source: 'test-page', ts: Date.now() }));
+  if (fileInput.files && fileInput.files[0]) {
+    formData.append('file', fileInput.files[0], fileInput.files[0].name);
+  }
+
+  const startedAt = performance.now();
+  setUploadMetric(null, 'FormData 上传中...', null);
+  updateUploadOutput({ status: 'uploading', has_file: !!(fileInput.files && fileInput.files[0]) });
+
+  try {
+    const response = await fetch('/api/upload-demo?_=' + Date.now(), {
+      method: 'POST',
+      body: formData,
+      cache: 'no-store'
+    });
+    const data = await response.json();
+    const elapsedMs = performance.now() - startedAt;
+    setUploadMetric(elapsedMs, '收到 ' + data.file_count + ' 个文件', response.ok);
+    updateUploadOutput({
+      status: response.status,
+      elapsed_ms: Math.round(elapsedMs),
+      content_type: data.content_type,
+      fields: data.fields,
+      files: data.files,
+      server_time: data.server_time
+    });
+    toast('上传验证完成: ' + data.file_count + ' 个文件', 'info');
+  } catch (e) {
+    const elapsedMs = performance.now() - startedAt;
+    setUploadMetric(elapsedMs, '上传失败', false);
+    updateUploadOutput({ error: e.message, elapsed_ms: Math.round(elapsedMs) });
+    toast('上传验证失败: ' + e.message, 'error');
+  }
+}
+
 async function reportButtonClick(button) {
   analyticsSequence += 1;
-  const payload = {
+  const payload = buildAnalyticsPayload(button);
+
+  try {
+    const result = await api('/api/analytics/events', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Plugin-Test-Event': 'button-click'
+      },
+      body: JSON.stringify(payload)
+    });
+    analyticsCount += 1;
+    document.getElementById('analyticsCount').textContent = analyticsCount;
+    updateAnalyticsOutput(result);
+    toast('埋点已上报 #' + result.id, 'info');
+  } catch (e) {
+    updateAnalyticsOutput({ error: e.message, payload });
+    toast('埋点上报失败: ' + e.message, 'error');
+  }
+}
+
+function buildAnalyticsPayload(button) {
+  const basePayload = {
     event_name: 'plugin_test_button_click',
     event_type: 'button_click',
     button_id: button.dataset.analyticsButton,
@@ -259,24 +578,98 @@ async function reportButtonClick(button) {
     }
   };
 
-  try {
-    const result = await api('/api/analytics/events', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'X-Plugin-Test-Event': 'button-click'
-      },
-      body: JSON.stringify(payload)
-    });
-    analyticsCount += 1;
-    document.getElementById('analyticsCount').textContent = analyticsCount;
-    updateAnalyticsOutput(result);
-    toast('埋点已上报 #' + result.id, 'info');
-  } catch (e) {
-    updateAnalyticsOutput({ error: e.message, payload });
-    toast('埋点上报失败: ' + e.message, 'error');
+  if (button.dataset.scenario !== 'nested') {
+    return basePayload;
   }
+
+  const nestedMetrics = {
+    app: 'plugin-test-app',
+    source: 'manual-test-button',
+    viewport: {
+      width: window.innerWidth,
+      height: window.innerHeight,
+      ratio: window.devicePixelRatio || 1
+    },
+    language: navigator.language,
+    device: {
+      platform: navigator.platform,
+      browser: {
+        name: 'Firefox',
+        user_agent: navigator.userAgent
+      }
+    },
+    tags: ['nested', 'list', 'dict', 'beacon'],
+    sections: [
+      {
+        name: 'profile',
+        fields: {
+          user: { id: 'demo-user-1001', role: 'tester' },
+          flags: ['beta', 'release']
+        }
+      },
+      {
+        name: 'action',
+        fields: {
+          event: {
+            id: button.dataset.analyticsButton,
+            text: button.textContent.trim()
+          },
+          labels: ['beacon', 'array']
+        }
+      }
+    ]
+  };
+
+  return {
+    event_name: 'plugin_test_nested_report',
+    event_type: 'button_click',
+    button_id: button.dataset.analyticsButton,
+    button_text: button.textContent.trim(),
+    scenario: button.dataset.scenario,
+    session_id: analyticsSessionId,
+    trace_id: 'trace_' + Date.now().toString(36) + '_' + analyticsSequence,
+    sequence: analyticsSequence,
+    user_id: 'demo-user-1001',
+    page_url: window.location.href,
+    pathname: window.location.pathname,
+    client_ts: new Date().toISOString(),
+    properties: nestedMetrics,
+    payload: {
+      report_type: 'nested_demo',
+      context: {
+        session_id: analyticsSessionId,
+        trace_id: 'trace_' + Date.now().toString(36) + '_' + analyticsSequence,
+        sequence: analyticsSequence,
+        buttons: [
+          { id: 'primary_cta', text: '主按钮点击' },
+          { id: 'nested_report', text: '复杂嵌套上报' }
+        ]
+      },
+      groups: [
+        {
+          group_id: 'group_a',
+          items: [
+            { key: 'app', value: 'plugin-test-app' },
+            { key: 'source', value: 'manual-test-button' }
+          ]
+        },
+        {
+          group_id: 'group_b',
+          items: [
+            { key: 'viewport', value: { width: window.innerWidth, height: window.innerHeight } },
+            { key: 'language', value: navigator.language }
+          ]
+        }
+      ],
+      matrix: [[1, 2], [3, 4]],
+      nested: {
+        list: [
+          { kind: 'alpha', value: { id: 1, tags: ['x', 'y'] } },
+          { kind: 'beta', value: { id: 2, tags: ['z'] } }
+        ]
+      }
+    }
+  };
 }
 
 async function loadAnalyticsEvents() {
@@ -436,6 +829,8 @@ document.querySelectorAll('[data-analytics-button]').forEach(button => {
 });
 
 // Init
+refreshNetworkInjectStatus();
+setTimeout(refreshNetworkInjectStatus, 300);
 loadTasks();
 loadAnalyticsEvents();
 </script>
