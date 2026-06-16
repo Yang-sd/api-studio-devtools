@@ -107,8 +107,6 @@ Useful test endpoints:
 ├── inject.js
 ├── manifest.json
 ├── manifest.firefox.json
-├── popup.html
-├── popup.js
 ├── scripts/
 └── test/
 ```
@@ -117,6 +115,7 @@ Useful test endpoints:
 
 - The extension does not modify system hosts files.
 - Weak-network simulation is browser-extension-level simulation, not OS-level packet loss.
+- The extension is used from the F12 DevTools API Studio panel; the toolbar icon does not open a popup page.
 - Firefox temporary add-ons need to be reloaded after every rebuild.
 - Generated files from the test app, such as SQLite databases, logs, PID files, and virtual environments, are ignored by Git.
 

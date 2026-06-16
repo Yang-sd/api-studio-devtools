@@ -19,9 +19,6 @@ cp "$ROOT_DIR"/devtools-panel.html "$OUT_DIR"/
 cp "$ROOT_DIR"/devtools-panel.css "$OUT_DIR"/
 cp "$ROOT_DIR"/devtools-panel.js "$OUT_DIR"/
 cp "$ROOT_DIR"/inject.js "$OUT_DIR"/
-cp "$ROOT_DIR"/popup.html "$OUT_DIR"/
-cp "$ROOT_DIR"/popup.css "$OUT_DIR"/
-cp "$ROOT_DIR"/popup.js "$OUT_DIR"/
 cp "$ROOT_DIR"/manifest.firefox.json "$OUT_DIR"/manifest.json
 cp "$ROOT_DIR"/icons/* "$OUT_DIR"/icons/
 cp -R "$ROOT_DIR"/_locales "$OUT_DIR"/

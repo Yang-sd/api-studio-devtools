@@ -12,7 +12,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   }
 });
 
-// 处理来自 popup / devtools panel 的消息
+// 处理来自 devtools panel 的消息
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'GET_ALL_RULES' || message.type === 'GET_RULES') {
     storageGet(['rules', 'ruleHits']).then(result => {

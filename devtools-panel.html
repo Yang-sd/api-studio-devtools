@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>API Studio DevTools</title>
+<title>API Studio 面板</title>
 <link rel="stylesheet" href="devtools-panel.css">
 </head>
 <body>
@@ -12,15 +12,18 @@
   <div class="tab-bar">
     <div class="tab-left">
       <span class="brand">🔌 API Studio</span>
-      <button class="language-toggle" id="languageToggleBtn" type="button" title="Switch language">EN</button>
+      <button class="theme-toggle" id="themeToggleBtn" type="button" title="切换主题">
+        <span class="theme-toggle-icon" id="themeToggleIcon">◐</span>
+        <span class="theme-toggle-text" id="themeToggleText">自动</span>
+      </button>
     </div>
     <div class="tab-nav">
-      <button class="tab active" data-tab="network"><span data-i18n="tab.network">Network</span></button>
-      <button class="tab" data-tab="replay"><span data-i18n="tab.replay">Replay</span></button>
-      <button class="tab" data-tab="mock"><span data-i18n="tab.mock">Mock</span> <span class="tab-hit-badge" id="totalHitsCount"></span><span class="tab-status-dot" id="mockTabStatusDot" title="Mock 总开关已启用" data-i18n-title="status.mockOn"></span></button>
-      <button class="tab" data-tab="throttle"><span data-i18n="tab.throttle">Throttle</span> <span class="tab-status-dot" id="throttleTabStatusDot" title="弱网预设已启用" data-i18n-title="status.throttleOn"></span></button>
-      <button class="tab" data-tab="beacon"><span data-i18n="tab.beacon">Beacon</span> <span class="tab-hit-badge" id="beaconCountBadge"></span></button>
-      <button class="tab" data-tab="cookies"><span data-i18n="tab.cookies">Cookies</span></button>
+      <button class="tab active" data-tab="network">Network</button>
+      <button class="tab" data-tab="replay">Replay</button>
+      <button class="tab" data-tab="mock">Mock <span class="tab-hit-badge" id="totalHitsCount"></span><span class="tab-status-dot" id="mockTabStatusDot" title="Mock 总开关已启用" data-i18n-title="status.mockOn"></span></button>
+      <button class="tab" data-tab="throttle">Throttle <span class="tab-status-dot" id="throttleTabStatusDot" title="弱网预设已启用" data-i18n-title="status.throttleOn"></span></button>
+      <button class="tab" data-tab="beacon">Beacon <span class="tab-hit-badge" id="beaconCountBadge"></span></button>
+      <button class="tab" data-tab="cookies">Cookies</button>
     </div>
   </div>
 
@@ -145,21 +148,41 @@
             <div class="detail-row"><span class="label" data-i18n="common.status">Status</span><span class="value" id="detailStatus"></span></div>
             <div class="detail-row"><span class="label" data-i18n="common.contentType">Content-Type</span><span class="value" id="detailContentType"></span></div>
           </div>
-          <div class="detail-section">
-            <div class="section-title" data-i18n="network.reqHeaders">请求 Headers</div>
-            <pre class="code-block" id="detailReqHeaders"></pre>
+          <div class="detail-section detail-collapsible">
+            <button class="detail-section-toggle" type="button" data-detail-toggle aria-expanded="true">
+              <span class="section-title" data-i18n="network.reqHeaders">请求 Headers</span>
+              <span class="detail-section-caret">▾</span>
+            </button>
+            <div class="detail-section-body">
+              <pre class="code-block detail-resizable" id="detailReqHeaders"></pre>
+            </div>
           </div>
-          <div class="detail-section">
-            <div class="section-title" data-i18n="network.reqBody">请求体</div>
-            <pre class="code-block" id="detailReqBody" data-i18n="common.empty">无</pre>
+          <div class="detail-section detail-collapsible">
+            <button class="detail-section-toggle" type="button" data-detail-toggle aria-expanded="true">
+              <span class="section-title" data-i18n="network.reqBody">请求体</span>
+              <span class="detail-section-caret">▾</span>
+            </button>
+            <div class="detail-section-body">
+              <div class="code-block request-body-panel detail-resizable" id="detailReqBody">无</div>
+            </div>
           </div>
-          <div class="detail-section">
-            <div class="section-title" data-i18n="network.resHeaders">响应 Headers</div>
-            <pre class="code-block" id="detailResHeaders"></pre>
+          <div class="detail-section detail-collapsible">
+            <button class="detail-section-toggle" type="button" data-detail-toggle aria-expanded="true">
+              <span class="section-title" data-i18n="network.resHeaders">响应 Headers</span>
+              <span class="detail-section-caret">▾</span>
+            </button>
+            <div class="detail-section-body">
+              <pre class="code-block detail-resizable" id="detailResHeaders"></pre>
+            </div>
           </div>
-          <div class="detail-section">
-            <div class="section-title" data-i18n="network.resBody">响应体</div>
-            <div class="code-block response-body-panel" id="detailResBody" data-i18n="common.loading">加载中...</div>
+          <div class="detail-section detail-collapsible">
+            <button class="detail-section-toggle" type="button" data-detail-toggle aria-expanded="true">
+              <span class="section-title" data-i18n="network.resBody">响应体</span>
+              <span class="detail-section-caret">▾</span>
+            </button>
+            <div class="detail-section-body">
+              <div class="code-block response-body-panel detail-resizable" id="detailResBody" data-i18n="common.loading">加载中...</div>
+            </div>
           </div>
         </div>
       </div>

@@ -15,10 +15,14 @@
   var activeGroup = DEFAULT_GROUP;
   var replayGroups = [DEFAULT_REPLAY_GROUP];
   var activeReplayGroup = DEFAULT_REPLAY_GROUP;
-  var activeLocale = getInitialLocale();
+  var activeLocale = 'zh';
+  var themeMode = 'auto';
+  var themeMediaQuery = null;
   var replayHistorySearchText = '';
   var networkSearchText = '';
   var networkFilterType = 'all';
+  var latestRequestId = null;
+  var highlightedRequestIds = {};
   var selectedRuleIds = {};
   var selectedReplayHistoryIds = {};
 
@@ -27,13 +31,15 @@
 
   // Tabs
   var tabNav = document.querySelector('.tab-nav');
+  var themeToggleBtn = $('themeToggleBtn');
+  var themeToggleIcon = $('themeToggleIcon');
+  var themeToggleText = $('themeToggleText');
   var tabMock = $('tabMock');
   var tabNetwork = $('tabNetwork');
   var tabBeacon = $('tabBeacon');
   var tabThrottle = $('tabThrottle');
   var tabCookies = $('tabCookies');
   var tabReplay = $('tabReplay');
-  var languageToggleBtn = $('languageToggleBtn');
 
   // Mock
   var mockList = $('mockList');
@@ -54,6 +60,7 @@
 
   // Network
   var requestBody = $('requestBody');
+  var requestTableScroll = requestBody ? requestBody.closest('.table-scroll') : null;
   var emptyState = $('emptyState');
   var countBadge = $('countBadge');
   var clearBtn = $('clearBtn');
@@ -211,6 +218,10 @@
     zh: {
       'lang.button': 'EN',
       'lang.title': 'Switch to English',
+      'theme.auto': '自动',
+      'theme.light': '浅色',
+      'theme.dark': '深色',
+      'theme.toggleTitle': '切换主题，当前为 {mode}',
       'tab.network': '网络',
       'tab.replay': '重放',
       'tab.mock': 'Mock',
@@ -264,6 +275,7 @@
       'mock.emptyGroup': '当前分组暂无规则',
       'mock.import': '导入 Mock',
       'mock.imported': '已导入 Mock',
+      'mock.unimport': '撤销 Mock',
       'mock.importTo': '导入到 Mock',
       'mock.modalNew': '新建规则',
       'mock.modalEdit': '编辑规则',
@@ -275,6 +287,7 @@
       'mock.unnamedRule': '未命名规则',
       'beacon.import': '导入 Beacon',
       'beacon.imported': '已导入 Beacon',
+      'beacon.unimport': '撤销 Beacon',
       'network.count': '{count} 个请求',
       'network.countFiltered': '{visible}/{total} 个请求',
       'network.filterPath': '过滤路径...',
@@ -298,6 +311,7 @@
       'network.resBody': '响应体',
       'replay.import': '导入 Replay',
       'replay.imported': '已导入 Replay',
+      'replay.unimport': '撤销 Replay',
       'replay.emptyTitle': '从 Network 里选择一个请求开始调试',
       'replay.emptyHint': '点击请求详情右上角的“导入 Replay”即可带入',
       'replay.searchGroup': '搜索分组...',
@@ -406,11 +420,16 @@
       'cookies.copySetCookie': '复制 Set-Cookie',
       'cookies.reqCookies': '请求 Cookies',
       'cookies.import': '导入 Cookies',
-      'cookies.imported': '已导入 Cookies'
+      'cookies.imported': '已导入 Cookies',
+      'cookies.unimport': '撤销 Cookies'
     },
     en: {
       'lang.button': '中文',
       'lang.title': '切换到中文',
+      'theme.auto': 'Auto',
+      'theme.light': 'Light',
+      'theme.dark': 'Dark',
+      'theme.toggleTitle': 'Switch theme, current: {mode}',
       'tab.network': 'Network',
       'tab.replay': 'Replay',
       'tab.mock': 'Mock',
@@ -464,6 +483,7 @@
       'mock.emptyGroup': 'No rules in this group',
       'mock.import': 'Import Mock',
       'mock.imported': 'Mock imported',
+      'mock.unimport': 'Remove Mock',
       'mock.importTo': 'Import to Mock',
       'mock.modalNew': 'New rule',
       'mock.modalEdit': 'Edit rule',
@@ -475,6 +495,7 @@
       'mock.unnamedRule': 'Unnamed rule',
       'beacon.import': 'Import Beacon',
       'beacon.imported': 'Beacon imported',
+      'beacon.unimport': 'Remove Beacon',
       'network.count': '{count} requests',
       'network.countFiltered': '{visible}/{total} requests',
       'network.filterPath': 'Filter path...',
@@ -498,6 +519,7 @@
       'network.resBody': 'Response Body',
       'replay.import': 'Import Replay',
       'replay.imported': 'Replay imported',
+      'replay.unimport': 'Remove Replay',
       'replay.emptyTitle': 'Select a request in Network to start debugging',
       'replay.emptyHint': 'Click “Import Replay” in request details to load it here',
       'replay.searchGroup': 'Search groups...',
@@ -606,18 +628,10 @@
       'cookies.copySetCookie': 'Copy Set-Cookie',
       'cookies.reqCookies': 'Request Cookies',
       'cookies.import': 'Import Cookies',
-      'cookies.imported': 'Cookies imported'
+      'cookies.imported': 'Cookies imported',
+      'cookies.unimport': 'Remove Cookies'
     }
   };
-
-  function getInitialLocale() {
-    try {
-      var saved = localStorage.getItem('apiStudioLocale');
-      if (saved === 'zh' || saved === 'en') return saved;
-    } catch (e) {}
-    var navLang = (navigator.language || '').toLowerCase();
-    return navLang.indexOf('zh') === 0 ? 'zh' : 'en';
-  }
 
   function t(key, params) {
     var dict = I18N[activeLocale] || I18N.zh;
@@ -637,20 +651,73 @@
     });
   }
 
-  function setLocale(locale) {
-    activeLocale = locale === 'en' ? 'en' : 'zh';
-    try { localStorage.setItem('apiStudioLocale', activeLocale); } catch (e) {}
-    applyLocale();
-    rerenderLocalizedViews();
+  function normalizeThemeMode(mode) {
+    return mode === 'light' || mode === 'dark' || mode === 'auto' ? mode : 'auto';
+  }
+
+  function getSystemThemeMode() {
+    try {
+      if (!window.matchMedia) return 'light';
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    } catch (err) {
+      return 'light';
+    }
+  }
+
+  function resolveThemeMode(mode) {
+    mode = normalizeThemeMode(mode);
+    return mode === 'auto' ? getSystemThemeMode() : mode;
+  }
+
+  function updateThemeToggle() {
+    if (!themeToggleBtn || !themeToggleText || !themeToggleIcon) return;
+    var labelKey = 'theme.' + themeMode;
+    var resolved = resolveThemeMode(themeMode);
+    themeToggleText.textContent = t(labelKey);
+    themeToggleIcon.textContent = themeMode === 'auto' ? '◐' : (resolved === 'dark' ? '☾' : '☀');
+    themeToggleBtn.title = t('theme.toggleTitle', { mode: t(labelKey) });
+    themeToggleBtn.setAttribute('aria-label', t('theme.toggleTitle', { mode: t(labelKey) }));
+  }
+
+  function applyTheme(mode, persist) {
+    themeMode = normalizeThemeMode(mode);
+    var resolved = resolveThemeMode(themeMode);
+    document.documentElement.dataset.theme = resolved;
+    if (persist !== false) {
+      try { localStorage.setItem('apiStudioTheme', themeMode); } catch (err) {}
+    }
+    updateThemeToggle();
+  }
+
+  function loadThemeMode() {
+    try {
+      themeMode = normalizeThemeMode(localStorage.getItem('apiStudioTheme') || 'auto');
+    } catch (err) {
+      themeMode = 'auto';
+    }
+  }
+
+  function watchThemePreference() {
+    if (!window.matchMedia) return;
+    try {
+      themeMediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    } catch (err) {
+      themeMediaQuery = null;
+    }
+    if (!themeMediaQuery) return;
+    var onThemeChange = function() {
+      if (themeMode === 'auto') applyTheme('auto', false);
+    };
+    if (typeof themeMediaQuery.addEventListener === 'function') {
+      themeMediaQuery.addEventListener('change', onThemeChange);
+    } else if (typeof themeMediaQuery.addListener === 'function') {
+      themeMediaQuery.addListener(onThemeChange);
+    }
   }
 
   function applyLocale() {
-    document.documentElement.lang = activeLocale === 'en' ? 'en' : 'zh-CN';
-    document.title = activeLocale === 'en' ? 'API Studio DevTools' : 'API Studio 开发者工具';
-    if (languageToggleBtn) {
-      languageToggleBtn.textContent = t('lang.button');
-      languageToggleBtn.title = t('lang.title');
-    }
+    document.documentElement.lang = 'zh-CN';
+    document.title = 'API Studio 面板';
     document.querySelectorAll('[data-i18n]').forEach(function(el) {
       el.textContent = t(el.dataset.i18n);
     });
@@ -800,7 +867,46 @@
     setElementPlaceholder('findInput', 'common.searchPage');
     setElementTitle('findPrevBtn', 'common.prev');
     setElementTitle('findNextBtn', 'common.next');
+    updateThemeToggle();
   }
+
+  function detailSectionKey(section) {
+    if (!section) return '';
+    var body = section.querySelector('.code-block[id]');
+    return body ? body.id : '';
+  }
+
+  function applyDetailSectionCollapsed(section, collapsed) {
+    if (!section) return;
+    section.classList.toggle('collapsed', !!collapsed);
+    var toggle = section.querySelector('[data-detail-toggle]');
+    if (toggle) toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+  }
+
+  function restoreDetailSectionStates() {
+    document.querySelectorAll('#tabNetwork .detail-collapsible').forEach(function(section) {
+      var key = detailSectionKey(section);
+      if (!key) return;
+      try {
+        applyDetailSectionCollapsed(section, localStorage.getItem('apiStudioDetailCollapsed:' + key) === '1');
+      } catch (e) {}
+    });
+  }
+
+  document.addEventListener('click', function(e) {
+    var toggle = e.target.closest && e.target.closest('[data-detail-toggle]');
+    if (!toggle) return;
+    var section = toggle.closest('.detail-collapsible');
+    if (!section) return;
+    var collapsed = !section.classList.contains('collapsed');
+    applyDetailSectionCollapsed(section, collapsed);
+    var key = detailSectionKey(section);
+    if (key) {
+      try { localStorage.setItem('apiStudioDetailCollapsed:' + key, collapsed ? '1' : '0'); } catch (err) {}
+    }
+  });
+
+  restoreDetailSectionStates();
 
   function rerenderLocalizedViews() {
     renderNetworkList();
@@ -817,15 +923,17 @@
     refreshDetailImportState();
   }
 
-  // ======================================================================
-  // TAB SWITCHING
-  // ======================================================================
-  if (languageToggleBtn) {
-    languageToggleBtn.addEventListener('click', function() {
-      setLocale(activeLocale === 'zh' ? 'en' : 'zh');
+  if (themeToggleBtn) {
+    themeToggleBtn.addEventListener('click', function() {
+      var nextMode = themeMode === 'auto' ? 'dark' : (themeMode === 'dark' ? 'light' : 'auto');
+      applyTheme(nextMode, true);
+      showToast(tt('主题已切换为：{mode}', 'Theme switched to: {mode}', { mode: t('theme.' + themeMode) }));
     });
   }
 
+  // ======================================================================
+  // TAB SWITCHING
+  // ======================================================================
   tabNav.addEventListener('click', function(e) {
     var btn = e.target.closest('.tab');
     if (!btn) return;
@@ -1691,6 +1799,7 @@
     var resHeaders = (entry.response && entry.response.headers) || [];
     var reqHeaderObj = objHeaders(reqHeaders);
     var resHeaderObj = objHeaders(resHeaders);
+    var postDataInfo = normalizeEntryPostData(entry.request && entry.request.postData);
     var responseContent = (entry.response && entry.response.content) || {};
     var totalTimeInfo = getEntryTotalTimeInfo(entry);
     var req = {
@@ -1706,7 +1815,10 @@
       resHeaders: resHeaderObj,
       cookies: extractRequestCookies(entry.request && entry.request.cookies, reqHeaderObj['cookie']),
       setCookies: extractResponseCookies(entry.response && entry.response.cookies, resHeaderObj['set-cookie']),
-      postData: entry.request && entry.request.postData ? entry.request.postData.text : '',
+      postData: postDataInfo.text,
+      postDataMimeType: postDataInfo.mimeType,
+      postDataParams: postDataInfo.params,
+      replayBodyState: replayBodyStateFromPostDataInfo(postDataInfo, headersToEditorText(reqHeaderObj)),
       mimeType: responseContent.mimeType || '',
       responseContent: '',
       responseEncoding: '',
@@ -1725,9 +1837,16 @@
       if (selectedBeaconId === req.id) renderBeaconTab();
     });
 
+    var shouldSelectLatest = !selectedId || selectedId === latestRequestId;
     requests.unshift(req);
+    markLatestRequest(req.id);
+    if (shouldSelectLatest) selectedId = req.id;
     if (requests.length > 500) requests.length = 500;
     renderNetworkList();
+    if (shouldSelectLatest) {
+      scrollRequestListToTop();
+      showDetails(req.id);
+    }
     refreshBeaconForRequest(req);
     updateBadge();
   });
@@ -1742,18 +1861,22 @@
   function saveToStorage(req) {
     chrome.storage.local.get('capturedRequests', function(result) {
       var list = result.capturedRequests || [];
-      if (list.some(function(r) { return r.url === req.url && r.method === req.method; })) return;
-      list.unshift({
+      var snapshot = {
         id: req.id, url: req.url, method: req.method, status: req.status,
         statusText: req.statusText, headers: req.headers, resHeaders: req.resHeaders,
         totalTimeMs: req.totalTimeMs, timeSource: req.timeSource || '', startedDateTime: req.startedDateTime,
         cookies: req.cookies, setCookies: req.setCookies, postData: req.postData || '',
+        postDataMimeType: req.postDataMimeType || '', postDataParams: req.postDataParams || [],
+        replayBodyState: req.replayBodyState || null,
         mimeType: req.mimeType, responseContent: req.responseContent,
         responseEncoding: req.responseEncoding || '',
         responseBodyState: req.responseBodyState || '',
         responseBodyMessage: req.responseBodyMessage || '',
         imported: !!req.imported, ruleId: req.ruleId || ''
-      });
+      };
+      var existing = list.find(function(r) { return r.url === req.url && r.method === req.method; });
+      if (existing) Object.assign(existing, snapshot);
+      else list.unshift(snapshot);
       if (list.length > 30) list.length = 30;
       chrome.storage.local.set({ capturedRequests: list });
     });
@@ -1779,6 +1902,9 @@
         cookies: item.cookies || [],
         setCookies: item.setCookies || [],
         postData: item.postData || '',
+        postDataMimeType: item.postDataMimeType || '',
+        postDataParams: item.postDataParams || [],
+        replayBodyState: item.replayBodyState || null,
         mimeType: mimeType,
         responseContent: item.responseContent || '',
         responseEncoding: item.responseEncoding || '',
@@ -1789,6 +1915,7 @@
         ruleId: item.ruleId || '',
         mocked: true
       };
+      if (!latestRequestId) latestRequestId = req.id;
       requests.unshift(req);
     });
     if (requests.length > 500) requests.length = 500;
@@ -1797,6 +1924,7 @@
   function loadCapturedMockRequests() {
     chrome.storage.local.get('capturedRequests', function(result) {
       mergeCapturedMockRequests(result.capturedRequests || []);
+      syncLatestRequestFromList();
       renderNetworkList();
       updateBadge();
     });
@@ -1804,6 +1932,7 @@
 
   function renderNetworkList() {
     if (!requestBody) return;
+    syncLatestRequestFromList();
     var visibleRequests = filteredRequests();
     emptyState.style.display = visibleRequests.length === 0 ? 'flex' : 'none';
     if (emptyState) {
@@ -1811,13 +1940,41 @@
       if (hint) hint.textContent = requests.length === 0 ? t('network.emptyHint') : t('network.emptyNoMatch');
     }
     requestBody.innerHTML = visibleRequests.map(function(r, index) {
-      return '<tr class="' + (r.id === selectedId ? 'selected' : '') + '" data-id="' + r.id + '">' +
+      var classes = [];
+      if (r.id === selectedId) classes.push('selected');
+      if (r.id === latestRequestId) classes.push('latest-row');
+      if (highlightedRequestIds[r.id]) classes.push('just-captured');
+      return '<tr class="' + classes.join(' ') + '" data-id="' + r.id + '">' +
         '<td class="col-id">' + (index + 1) + '</td>' +
         '<td class="col-method"><span class="method ' + r.method.toUpperCase() + '">' + r.method + '</span></td>' +
-        '<td class="col-url" title="' + escAttr(displayPath(r.url)) + '">' + escHtml(displayPathOnly(r.url)) + '</td>' +
+        '<td class="col-url" title="' + escAttr(displayPath(r.url)) + '"><span class="path-cell"><span class="path-cell-text">' + escHtml(displayPathOnly(r.url)) + '</span></span></td>' +
         '<td class="col-action"><button class="imp-btn" data-id="' + r.id + '">' + escHtml(t('network.import')) + '</button></td>' +
         '</tr>';
     }).join('');
+  }
+
+  function markLatestRequest(id) {
+    latestRequestId = id;
+    highlightedRequestIds[id] = true;
+    setTimeout(function() {
+      if (!highlightedRequestIds[id]) return;
+      delete highlightedRequestIds[id];
+      renderNetworkList();
+    }, 1800);
+  }
+
+  function scrollRequestListToTop() {
+    if (requestTableScroll) requestTableScroll.scrollTop = 0;
+  }
+
+  function resetLatestRequestState() {
+    latestRequestId = null;
+    highlightedRequestIds = {};
+  }
+
+  function syncLatestRequestFromList() {
+    if (latestRequestId && requests.some(function(req) { return req.id === latestRequestId; })) return;
+    latestRequestId = requests[0] ? requests[0].id : null;
   }
 
   function syncImportedState() {
@@ -1830,17 +1987,31 @@
         return;
       }
       if (req.imported) {
-        req.imported = hasImportedRuleForRequest(req);
+        var matchedRule = findImportedRuleForRequest(req);
+        req.imported = !!matchedRule;
+        req.ruleId = matchedRule ? matchedRule.id : '';
       }
     });
   }
 
   function hasImportedRuleForRequest(req) {
-    return rules.some(function(rule) {
-      var method = rule.method || 'ANY';
-      var pattern = rule.url && rule.url.pattern;
-      return (method === 'ANY' || method === req.method) && pattern === req.url;
-    });
+    return !!findImportedRuleForRequest(req);
+  }
+
+  function findImportedRuleForRequest(req) {
+    return rules.find(function(rule) {
+      return isRuleMatchingRequest(rule, req);
+    }) || null;
+  }
+
+  function isRuleMatchingRequest(rule, req) {
+    if (!rule || !req || !req.url) return false;
+    var method = rule.method || 'ANY';
+    if (method !== 'ANY' && method !== req.method) return false;
+    var pattern = rule.url && rule.url.pattern;
+    if (!pattern) return false;
+    var candidates = [req.url, displayPath(req.url), toMockPathPattern(req.url)].filter(Boolean);
+    return candidates.indexOf(pattern) !== -1;
   }
 
   function syncStoredImportedState() {
@@ -1923,28 +2094,28 @@
 
   if (importReplayBtn) {
     importReplayBtn.addEventListener('click', function() {
-      var req = findReq(selectedId);
+      var req = getCurrentDetailRequest();
       if (req) handleImportAction(req, 'replay');
     });
   }
 
   if (importMockBtn) {
     importMockBtn.addEventListener('click', function() {
-      var req = findReq(selectedId);
+      var req = getCurrentDetailRequest();
       if (req) handleImportAction(req, 'mock');
     });
   }
 
   if (importCookiesBtn) {
     importCookiesBtn.addEventListener('click', function() {
-      var req = findReq(selectedId);
+      var req = getCurrentDetailRequest();
       if (req) handleImportAction(req, 'cookies');
     });
   }
 
   if (importBeaconBtn) {
     importBeaconBtn.addEventListener('click', function() {
-      var req = findReq(selectedId);
+      var req = getCurrentDetailRequest();
       if (req) handleImportAction(req, 'beacon');
     });
   }
@@ -2032,6 +2203,7 @@
       requests.length = 0;
       selectedId = null;
       replayRequestId = null;
+      resetLatestRequestState();
       if (detailEmpty) detailEmpty.style.display = 'flex';
       if (detailContent) detailContent.style.display = 'none';
       renderNetworkList();
@@ -2120,6 +2292,7 @@
       requests.length = 0;
       selectedId = null;
       selectedBeaconId = '';
+      resetLatestRequestState();
       renderNetworkList();
       renderBeaconTab();
       updateBadge();
@@ -2534,6 +2707,10 @@
   function showDetails(id) {
     var req = findReq(id);
     if (!req) return;
+    if (selectedId !== id) {
+      selectedId = id;
+      renderNetworkList();
+    }
     syncImportedState();
 
     if (detailEmpty) detailEmpty.style.display = 'none';
@@ -2560,12 +2737,13 @@
     var ct = req.resHeaders['content-type'] || req.mimeType || '-';
     setText('detailContentType', ct);
     setText('detailReqHeaders', formatHeaders(req.headers));
-    setText('detailReqBody', req.postData || t('common.empty'));
+    renderDetailRequestBody(req);
     setText('detailResHeaders', formatHeaders(req.resHeaders));
 
     renderResponseBody(req, ct);
 
     updateImportButton(req);
+    reFind();
   }
 
   function importRequestCookies(req) {
@@ -2595,7 +2773,11 @@
     req.replayImported = true;
     renderReplayTab();
     refreshDetailImportState();
-    setReplayStatus(tt('请求已导入 Replay', 'Request imported to Replay'), 'success');
+    if (hasMultipartFilePlaceholders(replayBodyStateFromRequest(req))) {
+      setReplayStatus(tt('已识别文件上传字段；浏览器不允许插件自动回填本地文件，请重新选择文件后再发送。', 'File upload fields detected. Browser extensions cannot auto-fill local files, so choose the files again before sending.'));
+    } else {
+      setReplayStatus(tt('请求已导入 Replay', 'Request imported to Replay'), 'success');
+    }
     showToast(t('replay.imported'));
   }
 
@@ -2680,6 +2862,11 @@
 
   function getImportStates(req) {
     if (!req) return { replay: false, mock: false, cookies: false, beacon: false };
+    var mockRule = req.imported ? (req.ruleId ? null : findImportedRuleForRequest(req)) : findImportedRuleForRequest(req);
+    if (mockRule && !req.ruleId) {
+      req.imported = true;
+      req.ruleId = mockRule.id;
+    }
     return {
       replay: !!req.replayImported,
       mock: !!req.imported,
@@ -2698,29 +2885,29 @@
   function updateImportMenus(req) {
     var states = getImportStates(req);
     if (importReplayBtn) {
-      importReplayBtn.textContent = states.replay ? t('replay.imported') : t('replay.import');
+      importReplayBtn.textContent = states.replay ? t('replay.unimport') : t('replay.import');
       importReplayBtn.classList.toggle('imported', states.replay);
     }
     if (importMockBtn) {
-      importMockBtn.textContent = states.mock ? t('mock.imported') : t('mock.import');
+      importMockBtn.textContent = states.mock ? t('mock.unimport') : t('mock.import');
       importMockBtn.classList.toggle('imported', states.mock);
     }
     if (importCookiesBtn) {
-      importCookiesBtn.textContent = states.cookies ? t('cookies.imported') : t('cookies.import');
+      importCookiesBtn.textContent = states.cookies ? t('cookies.unimport') : t('cookies.import');
       importCookiesBtn.classList.toggle('imported', states.cookies);
     }
     if (importBeaconBtn) {
-      importBeaconBtn.textContent = states.beacon ? t('beacon.imported') : t('beacon.import');
+      importBeaconBtn.textContent = states.beacon ? t('beacon.unimport') : t('beacon.import');
       importBeaconBtn.classList.toggle('imported', states.beacon);
     }
     [floatingImportMenu].forEach(function(menu) {
       if (!menu) return;
       menu.querySelectorAll('.import-menu-item').forEach(function(item) {
         var target = item.dataset.importTarget || '';
-        if (target === 'replay') item.textContent = states.replay ? t('replay.imported') : t('replay.import');
-        if (target === 'mock') item.textContent = states.mock ? t('mock.imported') : t('mock.import');
-        if (target === 'cookies') item.textContent = states.cookies ? t('cookies.imported') : t('cookies.import');
-        if (target === 'beacon') item.textContent = states.beacon ? t('beacon.imported') : t('beacon.import');
+        if (target === 'replay') item.textContent = states.replay ? t('replay.unimport') : t('replay.import');
+        if (target === 'mock') item.textContent = states.mock ? t('mock.unimport') : t('mock.import');
+        if (target === 'cookies') item.textContent = states.cookies ? t('cookies.unimport') : t('cookies.import');
+        if (target === 'beacon') item.textContent = states.beacon ? t('beacon.unimport') : t('beacon.import');
       });
     });
   }
@@ -2773,17 +2960,201 @@
     el.textContent = formatResponseBodyDisplay(req, mimeType);
   }
 
+  function renderDetailRequestBody(req) {
+    var el = $('detailReqBody');
+    if (!el) return;
+
+    var bodyState = req && (req.replayBodyState || replayBodyStateFromRequest(req, buildReplayHeadersText(req)));
+    bodyState = normalizeReplayBodyState(bodyState);
+    var hasParams = Array.isArray(req && req.postDataParams) && req.postDataParams.length > 0;
+    var isFormBody = bodyState.type === 'urlencoded' || bodyState.type === 'multipart';
+    var rawBody = String(req && req.postData ? req.postData : '');
+    var contentType = String(req && (req.postDataMimeType || getHeaderCaseInsensitive(req.headers || {}, 'content-type') || '')).toLowerCase();
+
+    if (!rawBody && !hasParams && !bodyState.raw && bodyState.type === 'raw') {
+      el.innerHTML = '<div class="request-body-empty">' + escHtml(t('common.empty')) + '</div>';
+      return;
+    }
+
+    if (isFormBody) {
+      el.innerHTML = buildStructuredRequestBodyHtml(req, bodyState);
+      return;
+    }
+
+    if (hasParams) {
+      el.innerHTML = buildParamsRequestBodyHtml(req);
+      return;
+    }
+
+    var rawText = bodyState.raw || rawBody || t('common.empty');
+    var displayText = formatRequestBodyText(rawText, contentType);
+    el.innerHTML = '<pre class="request-body-raw">' + escHtml(displayText) + '</pre>';
+  }
+
+  function formatRequestBodyText(body, mimeType) {
+    body = String(body || '');
+    mimeType = String(mimeType || '').toLowerCase();
+    if (!body) return t('common.empty');
+    if (mimeType.indexOf('json') !== -1 || looksLikeJsonText(body)) {
+      try {
+        return JSON.stringify(JSON.parse(body), null, 2);
+      } catch (e) {}
+    }
+    return body;
+  }
+
+  function looksLikeJsonText(text) {
+    text = String(text || '').trim();
+    if (!text) return false;
+    var first = text[0];
+    var last = text[text.length - 1];
+    return (first === '{' && last === '}') || (first === '[' && last === ']');
+  }
+
+  function buildStructuredRequestBodyHtml(req, bodyState) {
+    bodyState = normalizeReplayBodyState(bodyState);
+    var rows = bodyState.type === 'multipart'
+      ? normalizeReplayMultipartRows(bodyState.fields)
+      : normalizeReplayUrlEncodedRows(bodyState.fields);
+    var contentType = req && (req.postDataMimeType || getHeaderCaseInsensitive(req.headers || {}, 'content-type') || bodyState.type || '');
+    var title = bodyState.type === 'multipart' ? tt('表单数据', 'Form Data') : tt('表单字段', 'Form Fields');
+    var bodyText = bodyState.raw || String(req && req.postData || '');
+    var parts = [];
+
+    parts.push('<div class="request-body-summary">');
+    parts.push('<div class="request-body-summary-line">' + escHtml(tt('请求类型: {type}', 'Body type: {type}', { type: title })) + '</div>');
+    if (contentType) {
+      parts.push('<div class="request-body-summary-line mono">Content-Type: ' + escHtml(String(contentType)) + '</div>');
+    }
+    parts.push('<div class="request-body-summary-line">' + escHtml(tt('字段数量: {count}', 'Fields: {count}', { count: rows.length })) + '</div>');
+    if (bodyState.type === 'multipart') {
+      parts.push('<div class="request-body-summary-note">' + escHtml(tt('文件字段会显示文件名，但本地文件内容不会被插件直接展开。', 'File fields show file metadata. The local file contents cannot be expanded by the extension.')) + '</div>');
+    }
+    parts.push('</div>');
+
+    parts.push('<div class="request-body-table-wrap">');
+    parts.push('<table class="request-body-table">');
+    parts.push('<thead><tr>');
+    parts.push('<th>' + escHtml(tt('字段名', 'Name')) + '</th>');
+    parts.push('<th>' + escHtml(tt('类型', 'Type')) + '</th>');
+    parts.push('<th>' + escHtml(tt('值', 'Value')) + '</th>');
+    parts.push('</tr></thead>');
+    parts.push('<tbody>');
+
+    if (!rows.length) {
+      parts.push('<tr class="request-body-row-empty"><td colspan="3">' + escHtml(t('common.empty')) + '</td></tr>');
+    } else {
+      rows.forEach(function(item) {
+        parts.push(renderRequestBodyRow(item, bodyState.type));
+      });
+    }
+
+    parts.push('</tbody></table></div>');
+
+    if (bodyText && bodyState.raw && bodyState.raw !== bodyText && bodyState.type === 'multipart') {
+      parts.push('<details class="request-body-raw-toggle">');
+      parts.push('<summary>' + escHtml(tt('查看原始 multipart 内容', 'View raw multipart body')) + '</summary>');
+      parts.push('<pre class="request-body-raw">' + escHtml(bodyState.raw || bodyText) + '</pre>');
+      parts.push('</details>');
+    }
+
+    return parts.join('');
+  }
+
+  function buildParamsRequestBodyHtml(req) {
+    var params = normalizePostDataParams((req && req.postDataParams) || []);
+    if (!params.length) return '<div class="request-body-empty">' + escHtml(t('common.empty')) + '</div>';
+    var parts = [];
+    parts.push('<div class="request-body-summary">');
+    parts.push('<div class="request-body-summary-line">' + escHtml(tt('请求类型: 表单字段', 'Body type: Form Fields')) + '</div>');
+    if (req && req.postDataMimeType) {
+      parts.push('<div class="request-body-summary-line mono">Content-Type: ' + escHtml(req.postDataMimeType) + '</div>');
+    }
+    parts.push('<div class="request-body-summary-line">' + escHtml(tt('字段数量: {count}', 'Fields: {count}', { count: params.length })) + '</div>');
+    parts.push('</div>');
+    parts.push('<div class="request-body-table-wrap"><table class="request-body-table"><thead><tr>');
+    parts.push('<th>' + escHtml(tt('字段名', 'Name')) + '</th>');
+    parts.push('<th>' + escHtml(tt('类型', 'Type')) + '</th>');
+    parts.push('<th>' + escHtml(tt('值', 'Value')) + '</th>');
+    parts.push('</tr></thead><tbody>');
+    params.forEach(function(item) {
+      parts.push(renderRequestBodyParamRow(item));
+    });
+    parts.push('</tbody></table></div>');
+    return parts.join('');
+  }
+
+  function renderRequestBodyRow(item, bodyType) {
+    item = item || {};
+    var type = item.type === 'file' ? 'file' : 'text';
+    var key = item.key || item.name || '';
+    if (type === 'file') return renderRequestBodyFileRow(item, key, bodyType);
+    return '<tr class="request-body-row request-body-row-text">' +
+      '<td class="request-body-cell request-body-key mono">' + escHtml(key || tt('(未命名字段)', '(Unnamed field)')) + '</td>' +
+      '<td class="request-body-cell request-body-type">' + escHtml(tt('文本', 'Text')) + '</td>' +
+      '<td class="request-body-cell request-body-value"><span class="request-body-text-value">' + escHtml(String(item.value === undefined || item.value === null ? '' : item.value)) + '</span></td>' +
+    '</tr>';
+  }
+
+  function renderRequestBodyFileRow(item, key, bodyType) {
+    var fileName = replayMultipartFileName(item);
+    var fileSize = replayMultipartFileSize(item);
+    var contentType = item.contentType || '';
+    var fileSizeText = fileSize !== '' && fileSize !== null && fileSize !== undefined ? formatBytesLabel(fileSize) : tt('未知大小', 'Unknown size');
+    var typeText = tt('文件', 'File');
+    var valueParts = [];
+    valueParts.push('<span class="request-body-file-name">' + escHtml(fileName || tt('(未选择文件)', '(No file selected)')) + '</span>');
+    valueParts.push('<span class="request-body-file-meta">' + escHtml(tt('二进制文件', 'Binary file')) + '</span>');
+    if (fileSizeText) valueParts.push('<span class="request-body-file-meta">' + escHtml(fileSizeText) + '</span>');
+    if (contentType) valueParts.push('<span class="request-body-file-meta mono">' + escHtml(contentType) + '</span>');
+    return '<tr class="request-body-row request-body-row-file">' +
+      '<td class="request-body-cell request-body-key mono">' + escHtml(key || tt('(未命名字段)', '(Unnamed field)')) + '</td>' +
+      '<td class="request-body-cell request-body-type">' + escHtml(typeText) + '</td>' +
+      '<td class="request-body-cell request-body-value">' + valueParts.join(' ') + '</td>' +
+    '</tr>';
+  }
+
+  function renderRequestBodyParamRow(item) {
+    item = item || {};
+    var key = item.key || item.name || '';
+    var typeLabel = item.type === 'file' ? tt('文件', 'File') : tt('文本', 'Text');
+    var valueHtml;
+    if (item.type === 'file') {
+      valueHtml = '<span class="request-body-file-name">' + escHtml(item.fileName || item.filename || tt('(未选择文件)', '(No file selected)')) + '</span>' +
+        '<span class="request-body-file-meta">' + escHtml(tt('二进制文件', 'Binary file')) + '</span>';
+    } else {
+      valueHtml = '<span class="request-body-text-value">' + escHtml(String(item.value === undefined || item.value === null ? '' : item.value)) + '</span>';
+    }
+    return '<tr class="request-body-row">' +
+      '<td class="request-body-cell request-body-key mono">' + escHtml(key || tt('(未命名字段)', '(Unnamed field)')) + '</td>' +
+      '<td class="request-body-cell request-body-type">' + escHtml(typeLabel) + '</td>' +
+      '<td class="request-body-cell request-body-value">' + valueHtml + '</td>' +
+    '</tr>';
+  }
+
+  function formatBytesLabel(size) {
+    var value = Number(size);
+    if (!isFinite(value) || value < 0) return '';
+    if (value < 1024) return value + ' B';
+    if (value < 1024 * 1024) return (value / 1024).toFixed(value % 1024 === 0 ? 0 : 1) + ' KB';
+    return (value / (1024 * 1024)).toFixed(value % (1024 * 1024) === 0 ? 0 : 1) + ' MB';
+  }
+
   function fillReplayEditor(req) {
     if (!req) return;
     if (replayMethod) replayMethod.value = (req.method || 'GET').toUpperCase();
     if (replayUrl) replayUrl.value = req.url || '';
     var headersText = buildReplayHeadersText(req);
     if (replayHeaders) replayHeaders.value = headersText;
-    applyReplayBodyState(req.replayBodyState || replayBodyStateFromRaw(req.postData || '', headersText));
+    applyReplayBodyState(req.replayBodyState || replayBodyStateFromRequest(req, headersText));
   }
 
   function buildReplayHeadersText(req) {
     var headerText = formatHeaders((req && req.headers) || {}).replace(t('common.empty'), '').replace('(无)', '');
+    var postDataMimeType = String((req && req.postDataMimeType) || '').trim();
+    if (postDataMimeType && headerText.toLowerCase().indexOf('content-type:') === -1) {
+      headerText = (headerText ? headerText + '\n' : '') + 'content-type: ' + postDataMimeType;
+    }
     if (req && req.cookies && req.cookies.length && headerText.toLowerCase().indexOf('cookie:') === -1) {
       headerText = (headerText ? headerText + '\n' : '') + 'cookie: ' + buildCookieHeader(req.cookies);
     }
@@ -2963,6 +3334,83 @@
     };
   }
 
+  function normalizeEntryPostData(postData) {
+    postData = postData || {};
+    var params = normalizePostDataParams(postData.params || []);
+    var inferredMimeType = String(postData.mimeType || '').trim();
+    if (!inferredMimeType) {
+      if (params.some(function(item) { return item.type === 'file' || item.fileName; })) {
+        inferredMimeType = 'multipart/form-data';
+      } else if (params.length) {
+        inferredMimeType = 'application/x-www-form-urlencoded;charset=UTF-8';
+      }
+    }
+    return {
+      text: typeof postData.text === 'string' ? postData.text : '',
+      mimeType: inferredMimeType,
+      params: params
+    };
+  }
+
+  function normalizePostDataParams(params) {
+    return (params || []).map(function(item) {
+      item = item || {};
+      var value = item.value;
+      if (value === undefined || value === null) value = '';
+      if (typeof value !== 'string') value = String(value);
+      var fileName = String(item.fileName || item.filename || '').trim();
+      return {
+        key: String(item.name || item.key || '').trim(),
+        value: value,
+        fileName: fileName,
+        contentType: String(item.contentType || '').trim(),
+        fileSize: item.fileSize === 0 ? 0 : (item.fileSize || item.size || ''),
+        type: fileName ? 'file' : 'text'
+      };
+    }).filter(function(item) {
+      return item.key || item.value || item.fileName;
+    });
+  }
+
+  function replayBodyStateFromPostDataInfo(postDataInfo, headersText) {
+    postDataInfo = postDataInfo || { text: '', mimeType: '', params: [] };
+    var headers = parseHeadersText(headersText || '');
+    var contentType = String(postDataInfo.mimeType || getHeaderCaseInsensitive(headers, 'content-type') || '').toLowerCase();
+    var raw = String(postDataInfo.text || '');
+    if (contentType.indexOf('x-www-form-urlencoded') !== -1) {
+      var formFields = postDataInfo.params.length ? postDataInfo.params.map(function(item) {
+        return { key: item.key, value: item.value };
+      }) : parseUrlEncodedRows(raw);
+      return normalizeReplayBodyState({ type: 'urlencoded', raw: raw, fields: formFields });
+    }
+    if (contentType.indexOf('multipart/form-data') !== -1) {
+      var multipartFields = postDataInfo.params.length ? postDataInfo.params.map(function(item) {
+        return item.type === 'file'
+          ? { key: item.key, type: 'file', fileName: item.fileName, fileSize: item.fileSize === 0 ? 0 : (item.fileSize || ''), contentType: item.contentType }
+          : { key: item.key, type: 'text', value: item.value === undefined || item.value === null ? '' : item.value };
+      }) : parseMultipartRowsFromRaw(raw, headersText || '');
+      return normalizeReplayBodyState({ type: 'multipart', raw: raw, fields: multipartFields });
+    }
+    return normalizeReplayBodyState({ type: 'raw', raw: raw });
+  }
+
+  function replayBodyStateFromRequest(req, headersText) {
+    req = req || {};
+    return replayBodyStateFromPostDataInfo({
+      text: req.postData || '',
+      mimeType: req.postDataMimeType || '',
+      params: req.postDataParams || []
+    }, headersText || buildReplayHeadersText(req));
+  }
+
+  function hasMultipartFilePlaceholders(state) {
+    state = normalizeReplayBodyState(state);
+    if (state.type !== 'multipart') return false;
+    return (state.fields || []).some(function(item) {
+      return item && item.type === 'file';
+    });
+  }
+
   function normalizeReplayBodyType(type) {
     return type === 'urlencoded' || type === 'multipart' ? type : 'raw';
   }
@@ -3067,7 +3515,6 @@
     } else if (type === 'multipart') {
       fields = normalizeReplayMultipartRows(fields);
       if (!fields.length && raw) fields = parseMultipartRowsFromRaw(raw, replayHeaders ? replayHeaders.value : '');
-      raw = fields.length ? replayBodyStateToText({ type: 'multipart', fields: fields }) : raw;
     } else {
       type = 'raw';
       fields = [];
@@ -3116,14 +3563,34 @@
           return {
             key: item.key || '',
             type: item.type === 'file' ? 'file' : 'text',
-            value: item.type === 'file' ? '' : String(item.value || ''),
+            value: item.type === 'file' ? '' : String(item.value === undefined || item.value === null ? '' : item.value),
             fileName: replayMultipartFileName(item),
-            fileSize: replayMultipartFileSize(item)
+            fileSize: replayMultipartFileSize(item),
+            contentType: item.contentType || ''
           };
         }
         return { key: item.key || '', value: String(item.value || '') };
       })
     };
+  }
+
+  function postDataParamsFromReplayBodyState(state) {
+    var normalized = normalizeReplayBodyState(state);
+    if (normalized.type === 'urlencoded') {
+      return normalizeReplayUrlEncodedRows(normalized.fields).map(function(item) {
+        return { key: item.key, name: item.key, value: item.value, type: 'text' };
+      });
+    }
+    if (normalized.type === 'multipart') {
+      return normalizeReplayMultipartRows(normalized.fields).map(function(item) {
+        if (item.type === 'file') {
+          var fileName = replayMultipartFileName(item);
+          return { key: item.key, name: item.key, value: '', fileName: fileName, filename: fileName, fileSize: replayMultipartFileSize(item), contentType: item.contentType || '', type: 'file' };
+        }
+        return { key: item.key, name: item.key, value: item.value === undefined || item.value === null ? '' : item.value, type: 'text' };
+      });
+    }
+    return [];
   }
 
   function replayBodySignature(state) {
@@ -3142,7 +3609,7 @@
       var params = new URLSearchParams();
       urlencodedRows.forEach(function(item) {
         if (!item.key) return;
-        params.append(item.key, item.value || '');
+        params.append(item.key, item.value === undefined || item.value === null ? '' : item.value);
       });
       return params.toString();
     }
@@ -3153,7 +3620,7 @@
         return item.key || item.value || replayMultipartFileName(item);
       }).map(function(item) {
         if (item.type === 'file') return (item.key || tt('(未命名字段)', '(Unnamed field)')) + '=@' + (replayMultipartFileName(item) || tt('(未选择文件)', '(No file selected)'));
-        return (item.key || tt('(未命名字段)', '(Unnamed field)')) + '=' + String(item.value || '');
+        return (item.key || tt('(未命名字段)', '(Unnamed field)')) + '=' + String(item.value === undefined || item.value === null ? '' : item.value);
       }).join('\n');
     }
     return raw;
@@ -3186,10 +3653,11 @@
       var type = typeSelect && typeSelect.value === 'file' ? 'file' : 'text';
       var file = fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
       var fileName = file ? file.name : (row.dataset.fileName || '');
-      var fileSize = file ? file.size : (row.dataset.fileSize || '');
+      var fileSize = file ? file.size : (row.dataset.fileSize === '0' ? 0 : (row.dataset.fileSize || ''));
+      var contentType = file ? file.type : (row.dataset.contentType || '');
       var value = valueInput ? valueInput.value : '';
       if (!key && !value && !fileName && !file) return;
-      var item = { key: key, type: type, value: type === 'text' ? value : '', fileName: fileName, fileSize: fileSize };
+      var item = { key: key, type: type, value: type === 'text' ? value : '', fileName: fileName, fileSize: fileSize, contentType: contentType };
       if (options.includeFiles && file) item.file = file;
       rows.push(item);
     });
@@ -3201,7 +3669,7 @@
       item = item || {};
       return {
         key: String(item.key || '').trim(),
-        value: String(item.value || '')
+        value: String(item.value === undefined || item.value === null ? '' : item.value)
       };
     }).filter(function(item) {
       return item.key || item.value;
@@ -3215,9 +3683,10 @@
       return {
         key: String(item.key || '').trim(),
         type: item.type === 'file' ? 'file' : 'text',
-        value: item.type === 'file' ? '' : String(item.value || ''),
+        value: item.type === 'file' ? '' : String(item.value === undefined || item.value === null ? '' : item.value),
         fileName: file ? file.name : String(item.fileName || ''),
-        fileSize: file ? file.size : (item.fileSize || ''),
+        fileSize: file ? file.size : (item.fileSize === 0 ? 0 : (item.fileSize || '')),
+        contentType: file ? file.type : String(item.contentType || ''),
         file: file
       };
     }).filter(function(item) {
@@ -3305,7 +3774,7 @@
       var fileName = replayMultipartFileName(item);
       var fileSize = replayMultipartFileSize(item);
       var fileHint = fileName ? t('replay.fileSaved', { name: fileName, size: fileSize ? ' (' + fileSize + ' bytes)' : '' }) : t('replay.noFile');
-      return '<div class="replay-form-row multipart" data-row-index="' + index + '" data-file-name="' + escAttr(fileName) + '" data-file-size="' + escAttr(fileSize) + '">' +
+      return '<div class="replay-form-row multipart" data-row-index="' + index + '" data-file-name="' + escAttr(fileName) + '" data-file-size="' + escAttr(fileSize) + '" data-content-type="' + escAttr(item.contentType || '') + '">' +
         '<input class="form-input" data-role="key" type="text" placeholder="' + escAttr(t('replay.fieldName')) + '" value="' + escAttr(item.key || '') + '">' +
         '<select class="form-select" data-role="fieldType">' +
           '<option value="text"' + (type === 'text' ? ' selected' : '') + '>' + escHtml(t('replay.text')) + '</option>' +
@@ -3339,7 +3808,7 @@
   function addReplayMultipartRow() {
     if (!replayMultipartRows) return;
     var index = replayMultipartRows.querySelectorAll('.replay-form-row').length;
-    replayMultipartRows.insertAdjacentHTML('beforeend', '<div class="replay-form-row multipart" data-row-index="' + index + '" data-file-name="" data-file-size="">' +
+    replayMultipartRows.insertAdjacentHTML('beforeend', '<div class="replay-form-row multipart" data-row-index="' + index + '" data-file-name="" data-file-size="" data-content-type="">' +
       '<input class="form-input" data-role="key" type="text" placeholder="' + escAttr(t('replay.fieldName')) + '" value="">' +
       '<select class="form-select" data-role="fieldType"><option value="text" selected>' + escHtml(t('replay.text')) + '</option><option value="file">' + escHtml(t('replay.file')) + '</option></select>' +
       '<div class="replay-form-file-wrap">' +
@@ -3371,6 +3840,7 @@
     if (file) {
       row.dataset.fileName = file.name;
       row.dataset.fileSize = String(file.size || 0);
+      row.dataset.contentType = file.type || '';
       if (hint) hint.textContent = t('replay.fileSelected', { name: file.name, size: file.size || 0 });
       return;
     }
@@ -3385,7 +3855,7 @@
   function replayMultipartFileSize(item) {
     if (!item) return '';
     if (item.file && typeof item.file.size === 'number') return item.file.size;
-    return item.fileSize || '';
+    return item.fileSize === 0 ? 0 : (item.fileSize || '');
   }
 
   function getHeaderCaseInsensitive(headers, name) {
@@ -4304,6 +4774,8 @@
       req.headers = normalizeHeaderKeys(headers);
       req.postData = method === 'GET' || method === 'HEAD' ? '' : bodyPayload.preview;
       req.replayBodyState = serializeReplayBodyState(bodyPayload.state);
+      req.postDataMimeType = bodyPayload.state.type === 'urlencoded' ? 'application/x-www-form-urlencoded;charset=UTF-8' : (bodyPayload.state.type === 'multipart' ? 'multipart/form-data' : '');
+      req.postDataParams = postDataParamsFromReplayBodyState(bodyPayload.state);
       req.status = result.status;
       req.statusText = result.statusText;
       req.resHeaders = result.headers;
@@ -4373,9 +4845,12 @@
     };
 
     chrome.runtime.sendMessage({ type: 'SAVE_RULE', rule: rule }, function() {
+      upsertById(rules, rule);
+      groups = uniqueGroups(groups.concat([normalizeGroup(rule.group)]));
       req.imported = true;
       req.ruleId = rule.id;
       updateStoredRequestImport(req);
+      renderRules();
       renderNetworkList();
       renderBeaconTab();
       showDetails(req.id);
@@ -4384,16 +4859,34 @@
   }
 
   function unimportRequest(req) {
-    if (!req || !req.imported || !req.ruleId) return;
+    if (!req) return;
+    if (!req.ruleId) {
+      var matchedRule = findImportedRuleForRequest(req);
+      if (matchedRule) {
+        req.imported = true;
+        req.ruleId = matchedRule.id;
+      }
+    }
+    if (!req.imported || !req.ruleId) {
+      req.imported = false;
+      updateStoredRequestImport(req);
+      refreshDetailImportState();
+      renderNetworkList();
+      return;
+    }
     var ruleId = req.ruleId;
     chrome.runtime.sendMessage({ type: 'DELETE_RULE', ruleId: ruleId }, function() {
+      rules = rules.filter(function(rule) { return rule.id !== ruleId; });
+      selectedRuleIds = Object.assign({}, selectedRuleIds);
+      delete selectedRuleIds[ruleId];
       req.imported = false;
       req.ruleId = '';
       updateStoredRequestImport(req);
-      loadRules();
+      renderRules();
       renderNetworkList();
       renderBeaconTab();
       if (selectedId === req.id) showDetails(req.id);
+      loadRules();
       showToast(tt('已取消导入 Mock', 'Mock import removed'));
     });
   }
@@ -4429,6 +4922,10 @@
           item.startedDateTime = req.startedDateTime || '';
           item.cookies = req.cookies || [];
           item.setCookies = req.setCookies || [];
+          item.postData = req.postData || '';
+          item.postDataMimeType = req.postDataMimeType || '';
+          item.postDataParams = req.postDataParams || [];
+          item.replayBodyState = req.replayBodyState || null;
           item.mimeType = req.mimeType;
           item.responseContent = req.responseContent;
           item.responseEncoding = req.responseEncoding || '';
@@ -4495,7 +4992,7 @@
     if (!req) return null;
     if ((req.method || 'GET').toUpperCase() !== String(method || 'GET').toUpperCase() || req.url !== url) return null;
     if (replayHeadersSignature(buildReplayHeadersText(req)) !== replayHeadersSignature(headersText)) return null;
-    var reqBodyState = req.replayBodyState || replayBodyStateFromRaw(req.postData || '', buildReplayHeadersText(req));
+    var reqBodyState = req.replayBodyState || replayBodyStateFromRequest(req, buildReplayHeadersText(req));
     if (replayBodySignature(reqBodyState) !== replayBodySignature(bodyState)) return null;
     return req;
   }
@@ -4785,6 +5282,8 @@
   function deleteBeaconMatch(id) {
     if (!id) return;
     requests = requests.filter(function(req) { return req.id !== id; });
+    delete highlightedRequestIds[id];
+    syncLatestRequestFromList();
     if (selectedBeaconId === id) selectedBeaconId = '';
     if (selectedId === id) {
       selectedId = null;
@@ -5504,6 +6003,18 @@
     return null;
   }
 
+  function getCurrentDetailRequest() {
+    var selected = selectedId ? findReq(selectedId) : null;
+    if (selected) return selected;
+    var detailUrl = (($('detailUrlFull') || {}).textContent || '').trim();
+    var detailMethod = (($('detailMethod') || {}).textContent || 'GET').trim();
+    var req = requests.find(function(item) {
+      return item && item.url === detailUrl && (item.method || 'GET') === detailMethod;
+    }) || null;
+    if (req) selectedId = req.id;
+    return req;
+  }
+
   function objHeaders(arr) {
     var obj = {};
     arr.forEach(function(h) {
@@ -5618,7 +6129,7 @@
     var esc = text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     var re = new RegExp("(" + esc + ")", "gi");
     /* Detail elements - highlight with span tag */
-    ["detailUrl","detailMethod","detailStatus","detailContentType","detailReqHeaders","detailReqBody","detailResHeaders","detailResBody"].forEach(function(id) {
+    ["detailUrl","detailMethod","detailStatus","detailContentType","detailReqHeaders","detailResHeaders","detailResBody"].forEach(function(id) {
       var el = document.getElementById(id);
       if (!el || !el.textContent || el.textContent.toLowerCase().indexOf(t) === -1) return;
       if (id === 'detailResBody' && el.classList.contains('is-media')) return;
@@ -5638,6 +6149,7 @@
         if (_findMatches[eIdx]) _findMatches[eIdx].span = spans[si];
       }
     });
+    highlightDetailRequestBody(text, re, t);
     /* Table rows - innerHTML highlighting on each cell */
     document.querySelectorAll("#requestBody tr").forEach(function(r) {
       if (r.textContent.toLowerCase().indexOf(t) === -1) return;
@@ -5663,11 +6175,12 @@
   }
 
   function clearAllHL() {
-    ["detailUrl","detailMethod","detailStatus","detailContentType","detailReqHeaders","detailReqBody","detailResHeaders","detailResBody"].forEach(function(id) {
+    ["detailUrl","detailMethod","detailStatus","detailContentType","detailReqHeaders","detailResHeaders","detailResBody"].forEach(function(id) {
       var el = document.getElementById(id);
       if (id === 'detailResBody' && el && el.classList.contains('is-media')) return;
       if (el && el.innerHTML !== el.textContent) el.innerHTML = el.textContent;
     });
+    clearDetailRequestBodyFindHighlights();
     document.querySelectorAll('#requestBody td .find-match').forEach(function(s) {
       var tx = document.createTextNode(s.textContent); s.parentNode.replaceChild(tx, s);
     });
@@ -5700,8 +6213,67 @@
       var current = _findMatches[_findIdx];
       el.classList.toggle("find-active", !!current && current.span === el);
     });
+    updateDetailRequestBodyFindState();
     document.querySelectorAll("#requestBody tr.find-row").forEach(function(r) {
       r.classList.toggle("find-active-row", _findMatches[_findIdx] && _findMatches[_findIdx].el === r);
+    });
+  }
+
+  function highlightDetailRequestBody(text, re, lowerNeedle) {
+    var el = document.getElementById('detailReqBody');
+    if (!el || !el.querySelector) return;
+    clearDetailRequestBodyFindHighlights();
+    var textNodes = collectTextNodes(el);
+    textNodes.forEach(function(node) {
+      var rawText = node.nodeValue || '';
+      if (!rawText || rawText.toLowerCase().indexOf(lowerNeedle) === -1) return;
+      var fragment = document.createDocumentFragment();
+      var lastIndex = 0;
+      rawText.replace(re, function(match, _group, offset) {
+        if (offset > lastIndex) fragment.appendChild(document.createTextNode(rawText.slice(lastIndex, offset)));
+        var span = document.createElement('span');
+        span.className = 'find-match detail-request-body-match';
+        span.textContent = match;
+        fragment.appendChild(span);
+        _findMatches.push({ el: el, span: span, match: match, offset: offset });
+        lastIndex = offset + match.length;
+        return match;
+      });
+      if (lastIndex < rawText.length) fragment.appendChild(document.createTextNode(rawText.slice(lastIndex)));
+      if (fragment.childNodes.length > 0) node.parentNode.replaceChild(fragment, node);
+    });
+  }
+
+  function collectTextNodes(root) {
+    var nodes = [];
+    if (!root || !root.ownerDocument) return nodes;
+    var textNodeFilter = typeof NodeFilter !== 'undefined' ? NodeFilter.SHOW_TEXT : 4;
+    var walker = document.createTreeWalker(root, textNodeFilter, null, false);
+    var node;
+    while ((node = walker.nextNode())) {
+      if (!node.nodeValue || !node.nodeValue.trim()) continue;
+      if (node.parentNode && node.parentNode.classList && node.parentNode.classList.contains('find-match')) continue;
+      nodes.push(node);
+    }
+    return nodes;
+  }
+
+  function clearDetailRequestBodyFindHighlights() {
+    var el = document.getElementById('detailReqBody');
+    if (!el) return;
+    el.querySelectorAll('.detail-request-body-match').forEach(function(span) {
+      var tx = document.createTextNode(span.textContent);
+      span.parentNode.replaceChild(tx, span);
+    });
+    if (el.normalize) el.normalize();
+  }
+
+  function updateDetailRequestBodyFindState() {
+    var el = document.getElementById('detailReqBody');
+    if (!el) return;
+    el.querySelectorAll('.detail-request-body-match').forEach(function(span) {
+      var current = _findMatches[_findIdx];
+      span.classList.toggle('find-active', !!current && current.span === span);
     });
   }
 
@@ -6033,7 +6605,7 @@
   }
 
   function escAttr(str) {
-    return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return String(str === undefined || str === null ? '' : str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
   function clampNumber(value, min, max) {
@@ -6210,6 +6782,9 @@
   // ======================================================================
 
   applyLocale();
+  loadThemeMode();
+  applyTheme(themeMode, false);
+  watchThemePreference();
   loadRules();        // Load mock rules
   chrome.storage.local.get('masterEnabled', function(result) {
     var enabled = result.masterEnabled !== false;
