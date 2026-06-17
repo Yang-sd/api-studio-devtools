@@ -108,5 +108,5 @@ Chrome Web Store 审核时可以参考 [docs/chrome-web-store-listing.md](docs/c
 - 通用业务代码只改 `src/shared/`。
 - Chrome 专用配置只改 `src/chrome/manifest.json`。
 - Firefox 专用配置只改 `src/firefox/manifest.json`。
-- 不要直接修改 `dist/`，它是构建输出目录，已被 Git 忽略。
+- 不要直接修改 `chrome-extension/` 或 `firefox-extension/`，它们是构建输出目录，已被 Git 忽略。
 - 新增浏览器差异时，优先放到 `src/shared/compat.js` 或 manifest，而不是复制一份业务代码。

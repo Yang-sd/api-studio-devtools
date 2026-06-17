@@ -1,7 +1,6 @@
 .DS_Store
 .idea/
 *.bak
-dist/
 chrome-extension/
 firefox-extension/
 *.zip
