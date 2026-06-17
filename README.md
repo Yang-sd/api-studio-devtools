@@ -1,62 +1,111 @@
 # API Studio DevTools
 
-API Studio DevTools is a browser DevTools extension for API capture, replay, mock, weak-network simulation, beacon inspection, and cookie analysis.
+API Studio DevTools 是一个浏览器 DevTools 扩展，用来做 API 抓包、重放、Mock、弱网模拟、埋点分析和 Cookie 观察。项目现在采用“共享源码 + 浏览器专用 manifest + 构建输出”的结构，Chrome 和 Firefox 共用同一份业务代码，避免后续维护两套重复逻辑。
 
-API Studio DevTools 是一个浏览器 DevTools 扩展，用来做 API 抓包、重放、Mock、弱网模拟、埋点分析和 Cookie 观察。
+## 功能亮点
 
-## Highlights / 功能亮点
+- **Network / 网络**：捕获当前页面请求，查看 URL、Method、Status、Headers、Cookie、耗时和响应体。
+- **Replay / 重放**：保存请求、分组管理、重命名并从 DevTools 面板重新发送。
+- **请求体编辑**：支持 raw JSON/text、`application/x-www-form-urlencoded`、`multipart/form-data` 和文件上传。
+- **Mock / 规则模拟**：从真实请求导入 Mock 规则，支持全局开关和分组管理。
+- **Throttle / 弱网**：模拟延迟、抖动、上传速度和下载速度，可作用于 Replay 或页面全局 fetch/XHR。
+- **Beacon / 埋点**：分析上报请求，支持嵌套字段、数组和重复 key 匹配。
+- **Cookies / Cookie**：收集请求 Cookie 和响应 `Set-Cookie`，便于调试登录态和会话问题。
+- **Theme / 主题**：支持自动、浅色、深色主题切换，自动模式跟随系统主题。
 
-- **Network / 网络**: capture requests from the current page and inspect URL, method, status, headers, cookies, timings, and response bodies.
-- **Replay / 重放**: save requests, organize them by group, rename them, and resend them from the DevTools panel.
-- **Replay body types / 重放请求体类型**: supports raw JSON/text, `application/x-www-form-urlencoded`, and `multipart/form-data` with file upload.
-- **Mock / 规则 Mock**: create local mock rules from captured requests and switch them on or off with a master toggle.
-- **Throttle / 弱网**: simulate delay, jitter, upload speed, and download speed for replay or page-global fetch/XHR traffic.
-- **Beacon / 埋点**: inspect reporting APIs and match nested payload fields, arrays, and repeated keys.
-- **Cookies / Cookie**: collect request cookies and response `Set-Cookie` values for debugging auth and session flows.
-- **Chrome and Firefox / Chrome 与 Firefox**: includes separate manifests and a Firefox build workflow.
+## 项目结构
 
-## Quick Start / 快速开始
+```text
+.
+├── docs/
+│   ├── chrome-web-store-listing.md
+│   └── privacy-policy.md
+├── scripts/
+│   ├── build-chrome.sh
+│   ├── build-firefox.sh
+│   ├── lib-extension-build.sh
+│   └── package-chrome.sh
+├── src/
+│   ├── chrome/
+│   │   └── manifest.json
+│   ├── firefox/
+│   │   └── manifest.json
+│   └── shared/
+│       ├── _locales/
+│       ├── icons/
+│       ├── background.js
+│       ├── compat.js
+│       ├── content.js
+│       ├── devtools.html
+│       ├── devtools.js
+│       ├── devtools-panel.html
+│       ├── devtools-panel.css
+│       ├── devtools-panel.js
+│       └── inject.js
+└── test/
+```
+
+## 构建与本地加载
 
 ### Chrome / Chromium
 
-1. Open `chrome://extensions`.
-2. Enable **Developer mode**.
-3. Click **Load unpacked**.
-4. Select this repository folder.
-5. Open DevTools and choose the **API Studio** tab.
+```bash
+bash scripts/build-chrome.sh
+```
+
+然后打开 `chrome://extensions`：
+
+1. 开启 **Developer mode / 开发者模式**。
+2. 点击 **Load unpacked / 加载已解压的扩展程序**。
+3. 选择 `dist/chrome/`。
+4. 打开任意网页 DevTools，进入 **API Studio** tab。
 
 ### Firefox
 
-1. Open `about:debugging#/runtime/this-firefox`.
-2. Click **Load Temporary Add-on**.
-3. Build the Firefox bundle:
-
 ```bash
-./scripts/build-firefox.sh
+bash scripts/build-firefox.sh
 ```
 
-4. Select `dist/firefox/manifest.json`.
-5. Open DevTools and choose the **API Studio** tab.
-6. After source changes, rebuild and reload the temporary add-on from `dist/firefox/manifest.json` again.
+然后打开 `about:debugging#/runtime/this-firefox`：
 
-## Testing the Replay editor / 验证 Replay 编辑器
+1. 点击 **Load Temporary Add-on / 临时载入附加组件**。
+2. 选择 `dist/firefox/manifest.json`。
+3. 打开任意网页 DevTools，进入 **API Studio** tab。
+4. 修改源码后需要重新构建并在 Firefox 里重新加载。
 
-Replay now supports multiple body formats.
+## Chrome Web Store 上传包
 
-Replay 现在支持多种请求体格式。
+生成 Chrome 商店可上传 zip：
 
-- Use **原始 / JSON** for plain JSON, XML, or text payloads.
-- Use **表单 URL Encoded** for classic form submissions.
-- Use **文件上传 FormData** for multipart requests and file uploads.
-- When sending `multipart/form-data`, let the browser set the `Content-Type` boundary automatically.
+```bash
+bash scripts/package-chrome.sh
+```
 
-## Test App / 测试站
+输出文件：
 
-The `test/` directory contains a small Flask app for validating capture, replay, mock, throttle, beacon, cookies, and multipart upload workflows.
+```text
+dist/chrome/api-studio-devtools-chrome.zip
+```
 
-`test/` 目录下是一个轻量 Flask 测试站，用来验证抓包、重放、Mock、弱网、埋点、Cookies 和 multipart 上传流程。
+上传 Chrome Web Store 时上传这个 zip 即可。zip 顶层会包含 `manifest.json`、JS/CSS/HTML、icons 和 `_locales`，不会包含 `test/`、`.git/`、`.idea/`、Firefox manifest 或源码备份文件。
 
-Run locally:
+## 权限说明
+
+- `storage`：保存 Mock 规则、命中次数、Replay 历史、分组、主题偏好、弱网预设等本地数据。
+- `host_permissions: <all_urls>`：让 DevTools 扩展在当前页面上下文中捕获和模拟不同站点的 API 请求。该权限只用于开发调试，不会修改系统 hosts 文件。
+- Firefox `clipboardWrite`：Firefox 对复制能力要求更显式，复制请求信息或 Cookie 信息时会用到。
+
+Chrome Web Store 审核时可以参考 [docs/chrome-web-store-listing.md](docs/chrome-web-store-listing.md) 里的权限说明和审核备注。
+
+## 隐私与数据
+
+扩展默认只在浏览器本地处理数据：Mock 规则、Replay 历史、捕获的请求摘要、Cookie 调试信息和主题偏好都保存在浏览器本地存储中。项目本身不包含后端服务，也不会把这些数据上传到第三方服务器。
+
+隐私政策草稿见 [docs/privacy-policy.md](docs/privacy-policy.md)。真正提交 Chrome Web Store 时，需要把隐私政策发布到可公开访问的 URL，例如 GitHub Pages、官网或其他静态页面。
+
+## 测试站
+
+`test/` 目录包含一个 Flask 测试站，用于验证抓包、重放、Mock、弱网、埋点、Cookies 和 multipart 上传流程。
 
 ```bash
 cd test
@@ -66,59 +115,22 @@ pip install -r requirements.txt
 python app.py
 ```
 
-Open:
+打开：
 
 ```text
 http://localhost:8080
 ```
 
-Useful test endpoints:
+常用验证点：
 
-- `GET /api/network/probe` and `POST /api/network/probe` for weak-network verification.
-- `POST /api/upload-demo` for multipart / file-upload verification.
-- `GET /api/analytics/events` and `POST /api/analytics/events` for beacon testing.
+- `GET /api/network/probe` 和 `POST /api/network/probe`：弱网验证。
+- `POST /api/upload-demo`：multipart / 文件上传验证。
+- `GET /api/analytics/events` 和 `POST /api/analytics/events`：埋点验证。
 
-### Weak-Network Verification / 弱网验证
+## 开发约定
 
-1. Reload the extension, then refresh the test page.
-2. In DevTools → API Studio → Throttle, enable a profile with `延迟 2000 ms`, `抖动 0 ms`, and `页面全局` enabled.
-3. Click `Fetch 延迟验证` on the test page.
-4. The `本次总耗时` value should be close to `2000 ms` or higher.
-
-### Multipart Upload Verification / 上传验证
-
-1. Open the test page at `http://localhost:8080`.
-2. Use the `文件上传验证台` card on the page, or send a Replay request to `POST /api/upload-demo`.
-3. Pick a file and submit the form.
-4. The response should show the uploaded file name and field data.
-
-## Project Structure / 项目结构
-
-```text
-.
-├── background.js
-├── compat.js
-├── content.js
-├── devtools.html
-├── devtools.js
-├── devtools-panel.html
-├── devtools-panel.css
-├── devtools-panel.js
-├── inject.js
-├── manifest.json
-├── manifest.firefox.json
-├── scripts/
-└── test/
-```
-
-## Development Notes / 开发说明
-
-- The extension does not modify system hosts files.
-- Weak-network simulation is browser-extension-level simulation, not OS-level packet loss.
-- The extension is used from the F12 DevTools API Studio panel; the toolbar icon does not open a popup page.
-- Firefox temporary add-ons need to be reloaded after every rebuild.
-- Generated files from the test app, such as SQLite databases, logs, PID files, and virtual environments, are ignored by Git.
-
-## English Summary / English Overview
-
-API Studio DevTools helps you inspect real browser traffic, replay requests with different body formats, create local mock rules, validate weak-network behavior, and debug analytics or cookie flows. It is designed for daily frontend development and testing, with a separate Firefox build path and a local Flask test app for verification.
+- 通用业务代码只改 `src/shared/`。
+- Chrome 专用配置只改 `src/chrome/manifest.json`。
+- Firefox 专用配置只改 `src/firefox/manifest.json`。
+- 不要直接修改 `dist/`，它是构建输出目录，已被 Git 忽略。
+- 新增浏览器差异时，优先放到 `src/shared/compat.js` 或 manifest，而不是复制一份业务代码。

@@ -8,6 +8,8 @@
   let activeThrottleProfileId = '';
   const extensionApi = ApiStudioCompat.api || chrome;
 
+  // content script 负责桥接页面上下文和扩展存储；真正改写 fetch/XHR 的逻辑在 inject.js。
+
   function isAbsoluteHttpUrl(value) {
     return /^https?:\/\//i.test(String(value || ''));
   }
@@ -200,6 +202,7 @@
   }
 
   function injectScript() {
+    // Chrome 可以通过 MAIN world 直接注入；Firefox 走 DOM script fallback，保持同一套业务逻辑。
     try {
       if (window.__API_STUDIO_INJECT_FALLBACK_SCHEDULED__) return;
       window.__API_STUDIO_INJECT_FALLBACK_SCHEDULED__ = true;

@@ -2,6 +2,7 @@ if (typeof ApiStudioCompat === 'undefined' && typeof importScripts === 'function
   importScripts('compat.js');
 }
 
+// background 只负责持久化规则和命中数据；请求拦截发生在页面注入层。
 // 扩展安装时初始化
 chrome.runtime.onInstalled.addListener(async (details) => {
   if (details.reason === 'install') {

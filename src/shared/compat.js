@@ -1,6 +1,7 @@
 (function(global) {
   'use strict';
 
+  // 统一 Chrome 回调式 API 和 Firefox Promise API，业务代码尽量只调用本兼容层。
   var runtimeApi = global.browser || global.chrome;
 
   function lastError() {
@@ -102,6 +103,7 @@
   }
 
   function copyText(text) {
+    // DevTools 页面优先使用 Clipboard API；不可用时退回到 textarea + execCommand。
     if (global.navigator && global.navigator.clipboard && global.navigator.clipboard.writeText) {
       return global.navigator.clipboard.writeText(text);
     }

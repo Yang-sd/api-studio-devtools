@@ -6,6 +6,7 @@
   window.__API_STUDIO_MOCK_INJECTED__ = true;
   window.__API_STUDIO_MOCK_INJECTED_VERSION__ = INJECT_VERSION;
 
+  // inject.js 运行在页面上下文，只通过 postMessage 向 content script 查询本地规则。
   // ====== 消息通信 ======
   let requestIdCounter = 0;
   const pendingRequests = new Map();
@@ -125,6 +126,7 @@
   }
 
   // ====== 拦截 fetch ======
+  // 这里不读取扩展存储，避免页面上下文直接依赖浏览器扩展 API。
   const originalFetch = window.fetch.bind(window);
   window.fetch = async function(input, init) {
     let url = '';
