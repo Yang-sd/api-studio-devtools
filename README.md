@@ -57,7 +57,7 @@ bash scripts/build-chrome.sh
 
 1. 开启 **Developer mode / 开发者模式**。
 2. 点击 **Load unpacked / 加载已解压的扩展程序**。
-3. 选择 `dist/chrome/`。
+3. 选择 `chrome-extension/`。
 4. 打开任意网页 DevTools，进入 **API Studio** tab。
 
 ### Firefox
@@ -69,7 +69,7 @@ bash scripts/build-firefox.sh
 然后打开 `about:debugging#/runtime/this-firefox`：
 
 1. 点击 **Load Temporary Add-on / 临时载入附加组件**。
-2. 选择 `dist/firefox/manifest.json`。
+2. 选择 `firefox-extension/manifest.json`。
 3. 打开任意网页 DevTools，进入 **API Studio** tab。
 4. 修改源码后需要重新构建并在 Firefox 里重新加载。
 
@@ -84,7 +84,7 @@ bash scripts/package-chrome.sh
 输出文件：
 
 ```text
-dist/chrome/api-studio-devtools-chrome.zip
+chrome-extension/api-studio-devtools-chrome.zip
 ```
 
 上传 Chrome Web Store 时上传这个 zip 即可。zip 顶层会包含 `manifest.json`、JS/CSS/HTML、icons 和 `_locales`，不会包含 `test/`、`.git/`、`.idea/`、Firefox manifest 或源码备份文件。

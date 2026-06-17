@@ -54,7 +54,7 @@ package_extension() {
   local archive_path="$out_dir/$archive_name"
   local temp_zip
 
-  temp_zip="$ROOT_DIR/dist/.${archive_name}.$$.zip"
+  temp_zip="$ROOT_DIR/.${archive_name}.$$.zip"
   rm -f "$archive_path"
   rm -f "$temp_zip"
   (cd "$out_dir" && zip -qr "$temp_zip" .)

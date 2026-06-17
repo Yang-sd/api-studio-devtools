@@ -69,7 +69,7 @@ The extension does not modify system hosts files and does not provide a remote c
 ## 提交前检查
 
 - 使用 `bash scripts/package-chrome.sh` 生成上传包。
-- 上传 `dist/chrome/api-studio-devtools-chrome.zip`。
+- 上传 `chrome-extension/api-studio-devtools-chrome.zip`。
 - 确认隐私政策 URL 可以公开访问。
 - 确认截图中没有真实用户数据、Cookie、Token 或公司内部接口。
 - 如果商店要求数据用途声明，按“本地处理，不上传第三方服务器”填写。
