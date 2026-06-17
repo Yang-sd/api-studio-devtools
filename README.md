@@ -1,6 +1,6 @@
 # API Studio DevTools
 
-API Studio DevTools 是一个浏览器 DevTools 扩展，用来做 API 抓包、重放、Mock、弱网模拟、埋点分析和 Cookie 观察。项目现在采用“共享源码 + 浏览器专用 manifest + 构建输出”的结构，Chrome 和 Firefox 共用同一份业务代码，避免后续维护两套重复逻辑。
+API Studio DevTools 是一个浏览器 DevTools 扩展，用来做 API 抓包、重放、Mock、埋点分析和 Cookie 观察。项目现在采用“共享源码 + 浏览器专用 manifest + 构建输出”的结构，Chrome 和 Firefox 共用同一份业务代码，避免后续维护两套重复逻辑。
 
 ## 功能亮点
 
@@ -8,7 +8,6 @@ API Studio DevTools 是一个浏览器 DevTools 扩展，用来做 API 抓包、
 - **Replay / 重放**：保存请求、分组管理、重命名并从 DevTools 面板重新发送。
 - **请求体编辑**：支持 raw JSON/text、`application/x-www-form-urlencoded`、`multipart/form-data` 和文件上传。
 - **Mock / 规则模拟**：从真实请求导入 Mock 规则，支持全局开关和分组管理。
-- **Throttle / 弱网**：模拟延迟、抖动、上传速度和下载速度，可作用于 Replay 或页面全局 fetch/XHR。
 - **Beacon / 埋点**：分析上报请求，支持嵌套字段、数组和重复 key 匹配。
 - **Cookies / Cookie**：收集请求 Cookie 和响应 `Set-Cookie`，便于调试登录态和会话问题。
 - **Theme / 主题**：支持自动、浅色、深色主题切换，自动模式跟随系统主题。
@@ -90,7 +89,7 @@ chrome-extension/api-studio-devtools-chrome.zip
 
 ## 权限说明
 
-- `storage`：保存 Mock 规则、命中次数、Replay 历史、分组、主题偏好、弱网预设等本地数据。
+- `storage`：保存 Mock 规则、命中次数、Replay 历史、分组、主题偏好等本地数据。
 - `host_permissions: <all_urls>`：让 DevTools 扩展在当前页面上下文中捕获和模拟不同站点的 API 请求。该权限只用于开发调试，不会修改系统 hosts 文件。
 - Firefox `clipboardWrite`：Firefox 对复制能力要求更显式，复制请求信息或 Cookie 信息时会用到。
 

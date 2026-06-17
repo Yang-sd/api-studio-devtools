@@ -22,7 +22,6 @@
       <button class="tab" data-tab="replay">Replay</button>
       <button class="tab" data-tab="mock">Mock <span class="tab-hit-badge" id="totalHitsCount"></span><span class="tab-status-dot" id="mockTabStatusDot" title="Mock 总开关已启用" data-i18n-title="status.mockOn"></span></button>
       <button class="tab" data-tab="beacon">Beacon <span class="tab-hit-badge" id="beaconCountBadge"></span></button>
-      <button class="tab" data-tab="throttle">Throttle <span class="tab-status-dot" id="throttleTabStatusDot" title="弱网预设已启用" data-i18n-title="status.throttleOn"></span></button>
       <button class="tab" data-tab="cookies">Cookies</button>
     </div>
   </div>
@@ -243,73 +242,6 @@
             <div class="detail-section">
               <div class="section-title" data-i18n="beacon.parsedPayload">解析后的上报数据</div>
               <pre class="code-block beacon-payload-block" id="beaconDetailPayload">无</pre>
-            </div>
-          </div>
-        </section>
-      </div>
-    </div>
-  </div>
-
-  <!-- ============ Throttle Tab ============ -->
-  <div class="tab-content" id="tabThrottle">
-    <div class="config-shell">
-      <div class="config-toolbar">
-        <div class="config-toolbar-left">
-          <span class="badge" id="throttleStatusBadge" data-i18n="throttle.noActive">未启用弱网</span>
-          <button class="btn btn-primary" id="addThrottleBtn" data-i18n="throttle.new">+ 新建预设</button>
-        </div>
-        <div class="config-toolbar-right">
-          <button class="btn btn-sm" id="clearThrottleBtn" data-i18n="common.clear">清空</button>
-        </div>
-      </div>
-      <div class="config-layout">
-        <aside class="config-list-panel">
-          <div class="config-list" id="throttleList">
-            <div class="empty-state" id="throttleEmpty">
-              <p data-i18n="throttle.emptyTitle">暂无弱网预设</p>
-              <p class="hint" data-i18n="throttle.emptyHint">用于 Replay 重发时模拟延迟、抖动和限速</p>
-            </div>
-          </div>
-        </aside>
-        <section class="config-detail-panel">
-          <div class="detail-empty" id="throttleDetailEmpty">
-            <p data-i18n="throttle.selectTitle">选择左侧预设查看详情</p>
-            <p class="hint" data-i18n="throttle.selectHint">启用后会影响 Replay 请求的发送和结果展示</p>
-          </div>
-          <div class="detail-content" id="throttleDetailContent" style="display:none">
-            <div class="detail-header">
-              <h3 data-i18n="throttle.configTitle">弱网配置</h3>
-              <div class="detail-header-actions">
-                <button class="btn btn-primary" id="applyThrottleBtn" data-i18n="throttle.apply">设为当前预设</button>
-                <button class="btn btn-secondary" id="editThrottleBtn" data-i18n="common.edit">编辑</button>
-                <button class="btn btn-danger" id="deleteThrottleBtn" data-i18n="common.delete">删除</button>
-              </div>
-            </div>
-            <div class="detail-section">
-              <div class="detail-row"><span class="label" data-i18n="throttle.name">名称</span><span class="value" id="throttleDetailName"></span></div>
-              <div class="detail-row"><span class="label" data-i18n="throttle.latency">延迟</span><span class="value" id="throttleDetailLatency"></span></div>
-              <div class="detail-row"><span class="label" data-i18n="throttle.jitter">抖动</span><span class="value" id="throttleDetailJitter"></span></div>
-              <div class="detail-row"><span class="label" data-i18n="throttle.down">下行</span><span class="value" id="throttleDetailDown"></span></div>
-              <div class="detail-row"><span class="label" data-i18n="throttle.up">上行</span><span class="value" id="throttleDetailUp"></span></div>
-              <div class="detail-row"><span class="label" data-i18n="throttle.scope">作用域</span><span class="value" id="throttleDetailScopes"></span></div>
-              <div class="detail-row"><span class="label" data-i18n="throttle.status">状态</span><span class="value" id="throttleDetailStatus"></span></div>
-            </div>
-            <div class="detail-section">
-              <div class="section-title" data-i18n="throttle.scopeSwitch">作用域开关</div>
-              <div class="config-scope-box throttle-scope-inline">
-                <div class="config-scope-toggle">
-                  <span><strong>Replay</strong><em data-i18n="throttle.replayScopeHint">仅影响 Replay 页面的重发请求</em></span>
-                  <label class="toggle"><input type="checkbox" id="throttleScopeReplay"><span class="toggle-slider"></span></label>
-                </div>
-                <div class="config-scope-toggle">
-                  <span><strong data-i18n="throttle.pageScope">页面全局</strong><em data-i18n="throttle.pageScopeHint">仅影响当前页面的 fetch / XHR 接口</em></span>
-                  <label class="toggle"><input type="checkbox" id="throttleScopePage"><span class="toggle-slider"></span></label>
-                </div>
-              </div>
-            </div>
-            <div class="detail-section">
-              <div class="section-title" data-i18n="throttle.description">说明</div>
-              <pre class="code-block" id="throttleDetailPreview"></pre>
             </div>
           </div>
         </section>

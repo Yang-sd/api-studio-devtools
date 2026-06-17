@@ -2,10 +2,8 @@
   'use strict';
 
   let ruleCache = [];
-  let throttleProfiles = [];
   let cacheReady = false;
   let masterEnabled = true;
-  let activeThrottleProfileId = '';
   const extensionApi = ApiStudioCompat.api || chrome;
 
   // content script 负责桥接页面上下文和扩展存储；真正改写 fetch/XHR 的逻辑在 inject.js。
@@ -83,17 +81,13 @@
 
   async function loadState() {
     try {
-      const result = await ApiStudioCompat.storageGet(['rules', 'masterEnabled', 'throttleProfiles', 'activeThrottleProfileId']);
+      const result = await ApiStudioCompat.storageGet(['rules', 'masterEnabled']);
       ruleCache = result.rules || [];
       masterEnabled = result.masterEnabled !== false;
-      throttleProfiles = result.throttleProfiles || [];
-      activeThrottleProfileId = result.activeThrottleProfileId || '';
       cacheReady = true;
     } catch (e) {
       ruleCache = [];
-      throttleProfiles = [];
       masterEnabled = true;
-      activeThrottleProfileId = '';
       cacheReady = true;
     }
   }
@@ -105,8 +99,6 @@
   ApiStudioCompat.addStorageChangedListener((changes) => {
     if (changes.rules) ruleCache = changes.rules.newValue || [];
     if (changes.masterEnabled !== undefined) masterEnabled = changes.masterEnabled.newValue !== false;
-    if (changes.throttleProfiles) throttleProfiles = changes.throttleProfiles.newValue || [];
-    if (changes.activeThrottleProfileId) activeThrottleProfileId = changes.activeThrottleProfileId.newValue || '';
   });
 
   window.addEventListener('message', async function(event) {
@@ -114,7 +106,6 @@
       const { requestId, url, method, body } = event.data;
       if (!cacheReady) await loadState();
       const matched = masterEnabled ? findRule(url, method, body) : null;
-      const throttle = getThrottleForRequest(!!matched);
       if (matched) {
         incrementHitCount(matched.id).catch(function(){});
         try {
@@ -143,56 +134,10 @@
       window.postMessage({
         type: '__MOCK_EXT_RESULT__',
         requestId: requestId,
-        rule: matched ? JSON.parse(JSON.stringify(matched)) : null,
-        throttle: throttle ? JSON.parse(JSON.stringify(throttle)) : null
+        rule: matched ? JSON.parse(JSON.stringify(matched)) : null
       }, '*');
     }
   });
-
-  function getThrottleForRequest() {
-    const pageThrottle = getActiveThrottleForScope('page');
-    if (pageThrottle) return pageThrottle;
-    return null;
-  }
-
-  function getActiveThrottleForScope(scope) {
-    if (!activeThrottleProfileId) return null;
-    const profile = (throttleProfiles || []).find(item => item && item.id === activeThrottleProfileId);
-    if (!profile) return null;
-    const scopes = normalizeThrottleScopes(profile.scopes);
-    return scopes[scope] ? normalizeThrottleProfile(profile) : null;
-  }
-
-  function normalizeThrottleScopes(scopes) {
-    scopes = scopes || {};
-    return {
-      replay: scopes.replay !== false,
-      page: scopes.page !== false || scopes.mock === true
-    };
-  }
-
-  function normalizeThrottleProfile(profile) {
-    return {
-      id: profile.id || '',
-      name: profile.name || '未命名预设',
-      latency: nonNegativeNumber(profile.latency),
-      jitterMs: nonNegativeNumber(profile.jitterMs),
-      downloadKbps: nonNegativeNumber(profile.downloadKbps),
-      uploadKbps: nonNegativeNumber(profile.uploadKbps),
-      scopes: normalizeThrottleScopes(profile.scopes)
-    };
-  }
-
-  function clampNumber(value, min, max) {
-    if (!isFinite(value)) value = min;
-    return Math.min(max, Math.max(min, value));
-  }
-
-  function nonNegativeNumber(value) {
-    value = Number(value);
-    if (!isFinite(value) || value < 0) return 0;
-    return value;
-  }
 
   async function incrementHitCount(ruleId) {
     const result = await ApiStudioCompat.storageGet('ruleHits');

@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  const INJECT_VERSION = '2026-06-12-basic-throttle-no-timeout-v4';
+  const INJECT_VERSION = '2026-06-17-mock-only-v1';
   if (window.__API_STUDIO_MOCK_INJECTED_VERSION__ === INJECT_VERSION) return;
   window.__API_STUDIO_MOCK_INJECTED__ = true;
   window.__API_STUDIO_MOCK_INJECTED_VERSION__ = INJECT_VERSION;
@@ -25,7 +25,7 @@
       setTimeout(() => {
         if (pendingRequests.has(requestId)) {
           pendingRequests.delete(requestId);
-          resolve({ rule: null, throttle: null });
+          resolve({ rule: null });
         }
       }, 3000);
     });
@@ -36,93 +36,13 @@
       const resolve = pendingRequests.get(event.data.requestId);
       if (resolve) {
         pendingRequests.delete(event.data.requestId);
-        resolve({
-          rule: event.data.rule || null,
-          throttle: event.data.throttle || null
-        });
+        resolve({ rule: event.data.rule || null });
       }
     }
   });
 
-  // ====== 处理响应延迟 ======
   function delay(ms) {
     return new Promise(r => setTimeout(r, ms));
-  }
-
-  function normalizeUrl(url) {
-    try {
-      return new URL(String(url || ''), window.location.href).href;
-    } catch (e) {
-      return String(url || '');
-    }
-  }
-
-  async function applyThrottleBeforeFetch(profile, body) {
-    if (!profile) return;
-    const roundTripDelay = Math.max(0, (Number(profile.latency) || 0) + randomJitter(profile.jitterMs));
-    let wait = roundTripDelay;
-    wait += transferDelayMs(body, profile.uploadKbps);
-    if (wait > 0) await delay(wait);
-  }
-
-  async function applyThrottleAfterFetch(profile, body) {
-    if (!profile) return;
-    const wait = transferDelayMs(body, profile.downloadKbps);
-    if (wait > 0) await delay(wait);
-  }
-
-  function randomJitter(jitterMs) {
-    jitterMs = Math.max(0, Number(jitterMs) || 0);
-    if (!jitterMs) return 0;
-    return Math.round((Math.random() * 2 - 1) * jitterMs);
-  }
-
-  function transferDelayMs(payload, kbps) {
-    kbps = Number(kbps) || 0;
-    if (!kbps || kbps <= 0) return 0;
-    const bytes = payloadByteLength(payload);
-    if (!bytes) return 0;
-    return Math.max(0, Math.round(bytes * 8 / (kbps * 1000) * 1000));
-  }
-
-  function payloadByteLength(payload) {
-    if (!payload) return 0;
-    if (typeof payload === 'string') {
-      try { return new TextEncoder().encode(payload).length; } catch (e) { return payload.length; }
-    }
-    if (payload instanceof Blob) return payload.size || 0;
-    if (payload instanceof ArrayBuffer) return payload.byteLength || 0;
-    if (payload instanceof URLSearchParams) return payload.toString().length;
-    return String(payload).length;
-  }
-
-  function clampNumber(value, min, max) {
-    if (!isFinite(value)) value = min;
-    return Math.min(max, Math.max(min, value));
-  }
-
-  function createThrottleFetchError(message) {
-    return new TypeError(message || '弱网模拟: 请求失败');
-  }
-
-  function dispatchXhrError(xhr, message) {
-    try {
-      Object.defineProperties(xhr, {
-        responseText: { value: '', configurable: true, writable: false },
-        response: { value: '', configurable: true, writable: false },
-        status: { value: 0, configurable: true, writable: false },
-        statusText: { value: message || 'Throttle Error', configurable: true, writable: false },
-        readyState: { value: 4, configurable: true, writable: false }
-      });
-    } catch (e) {}
-    if (xhr.onreadystatechange) {
-      try { xhr.onreadystatechange.call(xhr); } catch (e) {}
-    }
-    try {
-      xhr.dispatchEvent(new Event('readystatechange'));
-      xhr.dispatchEvent(new Event('error'));
-      xhr.dispatchEvent(new Event('loadend'));
-    } catch (e) {}
   }
 
   // ====== 拦截 fetch ======
@@ -166,43 +86,16 @@
       return originalFetch.call(window, input, init);
     }
     const rule = result && result.rule;
-    const throttle = result && result.throttle;
     if (rule) {
       const response = rule.response || {};
-      try {
-        await applyThrottleBeforeFetch(throttle, bodyText);
-      } catch (error) {
-        throw createThrottleFetchError(error.message);
-      }
       if (rule.delay > 0) await delay(rule.delay);
-      try {
-        await applyThrottleAfterFetch(throttle, response.body || '');
-      } catch (error) {
-        throw createThrottleFetchError(error.message);
-      }
       return new Response(response.body || '', {
         status: response.statusCode || 200,
         statusText: 'OK',
         headers: new Headers(response.headers || {'Content-Type': 'application/json'})
       });
     }
-    try {
-      await applyThrottleBeforeFetch(throttle, bodyText);
-    } catch (error) {}
-    const response = await originalFetch.call(window, input, init);
-    if (throttle && throttle.downloadKbps) {
-      let text;
-      try {
-        const cloned = response.clone();
-        text = await cloned.text();
-      } catch (e) {
-        return response;
-      }
-      try {
-        await applyThrottleAfterFetch(throttle, text);
-      } catch (error) {}
-    }
-    return response;
+    return originalFetch.call(window, input, init);
   };
 
   // ====== 拦截 XMLHttpRequest ======
@@ -241,28 +134,14 @@
       return origSend.apply(this, arguments);
     }
     const rule = result && result.rule;
-    const throttle = result && result.throttle;
     if (rule) {
       const response = rule.response || {};
-      try {
-        await applyThrottleBeforeFetch(throttle, bodyText);
-      } catch (error) {
-        dispatchXhrError(this, error.message);
-        return;
-      }
       if (rule.delay > 0) await delay(rule.delay);
 
       const statusCode = response.statusCode || 200;
       const responseBody = response.body || '';
       const respHeaders = response.headers || {'Content-Type': 'application/json'};
       const xhr = this;
-      try {
-        await applyThrottleAfterFetch(throttle, responseBody);
-      } catch (error) {
-        dispatchXhrError(this, error.message);
-        return;
-      }
-
       try {
         Object.defineProperties(xhr, {
           responseText: { value: responseBody, configurable: true, writable: false },
@@ -284,9 +163,6 @@
       return;
     }
 
-    try {
-      await applyThrottleBeforeFetch(throttle, bodyText);
-    } catch (error) {}
     return origSend.apply(this, arguments);
   };
 })();
