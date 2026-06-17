@@ -42,12 +42,11 @@ API Studio DevTools 是一个浏览器 DevTools 扩展，用来做 API 抓包、
 │       ├── devtools-panel.css
 │       ├── devtools-panel.js
 │       └── inject.js
-└── test/
 ```
 
 ## 构建与本地加载
 
-### Chrome / Chromium
+### Chrome 浏览器
 
 ```bash
 bash scripts/build-chrome.sh
@@ -60,7 +59,7 @@ bash scripts/build-chrome.sh
 3. 选择 `chrome-extension/`。
 4. 打开任意网页 DevTools，进入 **API Studio** tab。
 
-### Firefox
+### Firefox 浏览器
 
 ```bash
 bash scripts/build-firefox.sh
