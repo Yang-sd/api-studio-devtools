@@ -5,10 +5,3 @@ dist/
 chrome-extension/
 firefox-extension/
 *.zip
-test/.venv/
-test/__pycache__/
-test/*.db
-test/*.db-shm
-test/*.db-wal
-test/*.log
-test/*.pid

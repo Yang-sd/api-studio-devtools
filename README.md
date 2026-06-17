@@ -87,7 +87,7 @@ bash scripts/package-chrome.sh
 chrome-extension/api-studio-devtools-chrome.zip
 ```
 
-上传 Chrome Web Store 时上传这个 zip 即可。zip 顶层会包含 `manifest.json`、JS/CSS/HTML、icons 和 `_locales`，不会包含 `test/`、`.git/`、`.idea/`、Firefox manifest 或源码备份文件。
+上传 Chrome Web Store 时上传这个 zip 即可。zip 顶层会包含 `manifest.json`、JS/CSS/HTML、icons 和 `_locales`，不会包含 `.git/`、`.idea/`、Firefox manifest 或源码备份文件。
 
 ## 权限说明
 
@@ -102,30 +102,6 @@ Chrome Web Store 审核时可以参考 [docs/chrome-web-store-listing.md](docs/c
 扩展默认只在浏览器本地处理数据：Mock 规则、Replay 历史、捕获的请求摘要、Cookie 调试信息和主题偏好都保存在浏览器本地存储中。项目本身不包含后端服务，也不会把这些数据上传到第三方服务器。
 
 隐私政策草稿见 [docs/privacy-policy.md](docs/privacy-policy.md)。真正提交 Chrome Web Store 时，需要把隐私政策发布到可公开访问的 URL，例如 GitHub Pages、官网或其他静态页面。
-
-## 测试站
-
-`test/` 目录包含一个 Flask 测试站，用于验证抓包、重放、Mock、弱网、埋点、Cookies 和 multipart 上传流程。
-
-```bash
-cd test
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python app.py
-```
-
-打开：
-
-```text
-http://localhost:8080
-```
-
-常用验证点：
-
-- `GET /api/network/probe` 和 `POST /api/network/probe`：弱网验证。
-- `POST /api/upload-demo`：multipart / 文件上传验证。
-- `GET /api/analytics/events` 和 `POST /api/analytics/events`：埋点验证。
 
 ## 开发约定
 
