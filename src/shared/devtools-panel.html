@@ -120,15 +120,15 @@
 	      <div class="detail-panel">
         <div class="detail-empty" id="detailEmpty">
           <p data-i18n="network.selectRequest">选择左侧请求查看详情</p>
-          <p class="hint" data-i18n="network.importHint">点击 <span class="imp-btn-sample">导入</span> 可快速导入到 Replay / Mock / Cookies / Beacon</p>
+          <p class="hint" data-i18n="network.importHint">点击 <span class="imp-btn-sample">导入</span> 可快速导入到 Replay / Mock / Beacon / Cookies</p>
         </div>
         <div class="detail-content" id="detailContent" style="display:none">
           <div class="detail-header">
             <h3 data-i18n="network.detailTitle">请求详情</h3>
             <div class="detail-header-actions">
-              <button class="btn btn-secondary btn-import-target" id="importBeaconBtn" data-i18n="beacon.import">导入 Beacon</button>
               <button class="btn btn-secondary btn-import-target" id="importReplayBtn" data-i18n="replay.import">导入 Replay</button>
               <button class="btn btn-secondary btn-import-target" id="importMockBtn" data-i18n="mock.import">导入 Mock</button>
+              <button class="btn btn-secondary btn-import-target" id="importBeaconBtn" data-i18n="beacon.import">导入 Beacon</button>
               <button class="btn btn-secondary btn-import-target" id="importCookiesBtn" data-i18n="cookies.import">导入 Cookies</button>
             </div>
           </div>
@@ -505,8 +505,8 @@
   <div class="import-menu floating" id="floatingImportMenu" style="display:none">
     <button class="import-menu-item" data-import-target="replay" data-i18n="replay.import">导入 Replay</button>
     <button class="import-menu-item" data-import-target="mock" data-i18n="mock.import">导入 Mock</button>
-    <button class="import-menu-item" data-import-target="cookies" data-i18n="cookies.import">导入 Cookies</button>
     <button class="import-menu-item" data-import-target="beacon" data-i18n="beacon.import">导入 Beacon</button>
+    <button class="import-menu-item" data-import-target="cookies" data-i18n="cookies.import">导入 Cookies</button>
   </div>
 
   <div class="modal-overlay" id="configModalOverlay">
