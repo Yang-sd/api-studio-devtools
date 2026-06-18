@@ -29,6 +29,25 @@
   // ====== DOM ======
   var $ = function(id) { return document.getElementById(id); };
 
+  function closestEventTarget(event, selector) {
+    if (!event || !selector) return null;
+    if (typeof event.composedPath === 'function') {
+      var path = event.composedPath();
+      for (var i = 0; i < path.length; i++) {
+        var node = path[i];
+        if (node && node.nodeType === 1 && node.matches && node.matches(selector)) return node;
+      }
+    }
+    var target = event.target || null;
+    if (!target) return null;
+    if (target.nodeType !== 1) target = target.parentElement || target.parentNode || null;
+    while (target && target.nodeType === 1) {
+      if (target.matches && target.matches(selector)) return target;
+      target = target.parentElement;
+    }
+    return null;
+  }
+
   // Tabs
   var tabNav = document.querySelector('.tab-nav');
   var themeToggleBtn = $('themeToggleBtn');
@@ -846,11 +865,13 @@
   // ======================================================================
   // TAB SWITCHING
   // ======================================================================
-  tabNav.addEventListener('click', function(e) {
-    var btn = e.target.closest('.tab');
-    if (!btn) return;
-    activateTab(btn.dataset.tab);
-  });
+  if (tabNav) {
+    tabNav.addEventListener('click', function(e) {
+      var btn = closestEventTarget(e, '.tab');
+      if (!btn) return;
+      activateTab(btn.dataset.tab);
+    });
+  }
 
   function activateTab(tab) {
     document.querySelectorAll('.tab').forEach(function(t) {
@@ -1703,6 +1724,7 @@
   // NETWORK TAB — CAPTURE REQUESTS
   // ======================================================================
 
+  if (chrome.devtools && chrome.devtools.network && chrome.devtools.network.onRequestFinished) {
   chrome.devtools.network.onRequestFinished.addListener(function(entry) {
     var id = 'req_' + Date.now() + '_' + random(6);
     var reqHeaders = (entry.request && entry.request.headers) || [];
@@ -1760,6 +1782,7 @@
     refreshBeaconForRequest(req);
     updateBadge();
   });
+  }
 
   function refreshBeaconForRequest(req) {
     if (!req || !beaconConfig.enabled || !beaconConfig.path) return;
@@ -3099,6 +3122,3066 @@
     if (!replayStatus) return;
     replayStatus.textContent = message || '';
     replayStatus.className = 'replay-status' + (state ? ' ' + state : '');
+  }
+
+  function parseHeadersText(text) {
+    var headerObj = {};
+    (text || '').split(/\r?\n/).forEach(function(line) {
+      var raw = line.trim();
+      if (!raw) return;
+      var idx = raw.indexOf(':');
+      if (idx <= 0) return;
+      var key = raw.slice(0, idx).trim();
+      var value = raw.slice(idx + 1).trim();
+      if (key) headerObj[key] = value;
+    });
+    return headerObj;
+  }
+
+  function createEmptyReplayBodyDrafts() {
+    return {
+      raw: '',
+      urlencoded: [],
+      multipart: []
+    };
+  }
+
+  function normalizeEntryPostData(postData) {
+    postData = postData || {};
+    var params = normalizePostDataParams(postData.params || []);
+    var inferredMimeType = String(postData.mimeType || '').trim();
+    if (!inferredMimeType) {
+      if (params.some(function(item) { return item.type === 'file' || item.fileName; })) {
+        inferredMimeType = 'multipart/form-data';
+      } else if (params.length) {
+        inferredMimeType = 'application/x-www-form-urlencoded;charset=UTF-8';
+      }
+    }
+    return {
+      text: typeof postData.text === 'string' ? postData.text : '',
+      mimeType: inferredMimeType,
+      params: params
+    };
+  }
+
+  function normalizePostDataParams(params) {
+    return (params || []).map(function(item) {
+      item = item || {};
+      var value = item.value;
+      if (value === undefined || value === null) value = '';
+      if (typeof value !== 'string') value = String(value);
+      var fileName = String(item.fileName || item.filename || '').trim();
+      return {
+        key: String(item.name || item.key || '').trim(),
+        value: value,
+        fileName: fileName,
+        contentType: String(item.contentType || '').trim(),
+        fileSize: item.fileSize === 0 ? 0 : (item.fileSize || item.size || ''),
+        type: fileName ? 'file' : 'text'
+      };
+    }).filter(function(item) {
+      return item.key || item.value || item.fileName;
+    });
+  }
+
+  function replayBodyStateFromPostDataInfo(postDataInfo, headersText) {
+    postDataInfo = postDataInfo || { text: '', mimeType: '', params: [] };
+    var headers = parseHeadersText(headersText || '');
+    var contentType = String(postDataInfo.mimeType || getHeaderCaseInsensitive(headers, 'content-type') || '').toLowerCase();
+    var raw = String(postDataInfo.text || '');
+    if (contentType.indexOf('x-www-form-urlencoded') !== -1) {
+      var formFields = postDataInfo.params.length ? postDataInfo.params.map(function(item) {
+        return { key: item.key, value: item.value };
+      }) : parseUrlEncodedRows(raw);
+      return normalizeReplayBodyState({ type: 'urlencoded', raw: raw, fields: formFields });
+    }
+    if (contentType.indexOf('multipart/form-data') !== -1) {
+      var multipartFields = postDataInfo.params.length ? postDataInfo.params.map(function(item) {
+        return item.type === 'file'
+          ? { key: item.key, type: 'file', fileName: item.fileName, fileSize: item.fileSize === 0 ? 0 : (item.fileSize || ''), contentType: item.contentType }
+          : { key: item.key, type: 'text', value: item.value === undefined || item.value === null ? '' : item.value };
+      }) : parseMultipartRowsFromRaw(raw, headersText || '');
+      return normalizeReplayBodyState({ type: 'multipart', raw: raw, fields: multipartFields });
+    }
+    return normalizeReplayBodyState({ type: 'raw', raw: raw });
+  }
+
+  function replayBodyStateFromRequest(req, headersText) {
+    req = req || {};
+    return replayBodyStateFromPostDataInfo({
+      text: req.postData || '',
+      mimeType: req.postDataMimeType || '',
+      params: req.postDataParams || []
+    }, headersText || buildReplayHeadersText(req));
+  }
+
+  function hasMultipartFilePlaceholders(state) {
+    state = normalizeReplayBodyState(state);
+    if (state.type !== 'multipart') return false;
+    return (state.fields || []).some(function(item) {
+      return item && item.type === 'file';
+    });
+  }
+
+  function normalizeReplayBodyType(type) {
+    return type === 'urlencoded' || type === 'multipart' ? type : 'raw';
+  }
+
+  function getReplayBodyType() {
+    return normalizeReplayBodyType(replayBodyType ? replayBodyType.value : 'raw');
+  }
+
+  function replayBodyTypeTipText(type) {
+    if (type === 'urlencoded') return t('replay.tipUrlencoded');
+    if (type === 'multipart') return t('replay.tipMultipart');
+    return t('replay.tipRaw');
+  }
+
+  function syncReplayBodyDraftFromEditor() {
+    if (!replayBodyDrafts) replayBodyDrafts = createEmptyReplayBodyDrafts();
+    var type = getReplayBodyType();
+    if (type === 'raw') {
+      replayBodyDrafts.raw = replayBody ? replayBody.value : '';
+      return;
+    }
+    if (type === 'urlencoded') {
+      replayBodyDrafts.urlencoded = readReplayUrlEncodedRows();
+      return;
+    }
+    replayBodyDrafts.multipart = readReplayMultipartRows({ includeFiles: true });
+  }
+
+  function switchReplayBodyType(type) {
+    syncReplayBodyDraftFromEditor();
+    type = normalizeReplayBodyType(type);
+    if (replayBodyType) replayBodyType.value = type;
+    if (type === 'urlencoded' && replayBodyDrafts.urlencoded.length === 0) {
+      replayBodyDrafts.urlencoded = parseUrlEncodedRows(replayBodyDrafts.raw || '');
+    }
+    if (type === 'multipart' && replayBodyDrafts.multipart.length === 0) {
+      replayBodyDrafts.multipart = parseMultipartRowsFromRaw(replayBodyDrafts.raw || '', replayHeaders ? replayHeaders.value : '');
+    }
+    renderReplayBodyEditor();
+    reFindReplayIfNeeded();
+  }
+
+  function renderReplayBodyEditor(options) {
+    options = options || {};
+    var type = getReplayBodyType();
+    if (!replayBodyDrafts) replayBodyDrafts = createEmptyReplayBodyDrafts();
+    if (replayBodyType && replayBodyType.value !== type) replayBodyType.value = type;
+    if (replayBodyTypeTip) replayBodyTypeTip.textContent = replayBodyTypeTipText(type);
+    if (replayBody) {
+      replayBody.hidden = type !== 'raw';
+      if (type === 'raw') replayBody.value = replayBodyDrafts.raw || '';
+    }
+    if (replayUrlEncodedEditor) replayUrlEncodedEditor.hidden = type !== 'urlencoded';
+    if (replayMultipartEditor) replayMultipartEditor.hidden = type !== 'multipart';
+    if (type === 'urlencoded' && (options.forceRows || !replayUrlEncodedRows || !replayUrlEncodedRows.querySelector('.replay-form-row'))) renderReplayUrlEncodedRows(replayBodyDrafts.urlencoded || []);
+    if (type === 'multipart' && (options.forceRows || !replayMultipartRows || !replayMultipartRows.querySelector('.replay-form-row'))) renderReplayMultipartRows(replayBodyDrafts.multipart || []);
+    if (formatReplayJsonBtn) formatReplayJsonBtn.disabled = type !== 'raw';
+    if (minifyReplayJsonBtn) minifyReplayJsonBtn.disabled = type !== 'raw';
+  }
+
+  function applyReplayBodyState(state) {
+    var normalized = normalizeReplayBodyState(state);
+    replayBodyDrafts = createEmptyReplayBodyDrafts();
+    replayBodyDrafts.raw = normalized.raw || '';
+    if (normalized.type === 'urlencoded') replayBodyDrafts.urlencoded = normalized.fields.slice();
+    if (normalized.type === 'multipart') replayBodyDrafts.multipart = normalized.fields.slice();
+    if (replayBodyType) replayBodyType.value = normalized.type;
+    renderReplayBodyEditor({ forceRows: true });
+  }
+
+  function captureReplayBodyState(options) {
+    options = options || {};
+    syncReplayBodyDraftFromEditor();
+    var type = getReplayBodyType();
+    if (type === 'urlencoded') {
+      return normalizeReplayBodyState({
+        type: 'urlencoded',
+        raw: replayBodyStateToText({ type: 'urlencoded', fields: replayBodyDrafts.urlencoded || [] }),
+        fields: replayBodyDrafts.urlencoded || []
+      });
+    }
+    if (type === 'multipart') {
+      return normalizeReplayBodyState({
+        type: 'multipart',
+        raw: replayBodyStateToText({ type: 'multipart', fields: replayBodyDrafts.multipart || [] }),
+        fields: readReplayMultipartRows({ includeFiles: !!options.includeFiles })
+      });
+    }
+    return normalizeReplayBodyState({ type: 'raw', raw: replayBodyDrafts.raw || '' });
+  }
+
+  function normalizeReplayBodyState(state) {
+    if (typeof state === 'string') return { type: 'raw', raw: state, fields: [] };
+    state = state || {};
+    var type = normalizeReplayBodyType(state.type || state.bodyType);
+    var raw = state.raw !== undefined ? String(state.raw || '') : String(state.body || '');
+    var fields = state.fields || state.bodyFields || [];
+    if (type === 'urlencoded') {
+      fields = normalizeReplayUrlEncodedRows(fields);
+      if (!fields.length && raw) fields = parseUrlEncodedRows(raw);
+      raw = fields.length ? replayBodyStateToText({ type: 'urlencoded', fields: fields }) : raw;
+    } else if (type === 'multipart') {
+      fields = normalizeReplayMultipartRows(fields);
+      if (!fields.length && raw) fields = parseMultipartRowsFromRaw(raw, replayHeaders ? replayHeaders.value : '');
+    } else {
+      type = 'raw';
+      fields = [];
+    }
+    return { type: type, raw: raw, fields: fields };
+  }
+
+  function replayBodyStateFromRaw(raw, headersText) {
+    raw = String(raw || '');
+    var headers = parseHeadersText(headersText || '');
+    var contentType = String(getHeaderCaseInsensitive(headers, 'content-type') || '').toLowerCase();
+    if (contentType.indexOf('x-www-form-urlencoded') !== -1) {
+      return normalizeReplayBodyState({ type: 'urlencoded', raw: raw, fields: parseUrlEncodedRows(raw) });
+    }
+    if (contentType.indexOf('multipart/form-data') !== -1) {
+      return normalizeReplayBodyState({ type: 'multipart', raw: raw, fields: parseMultipartRowsFromRaw(raw, headersText || '') });
+    }
+    return normalizeReplayBodyState({ type: 'raw', raw: raw });
+  }
+
+  function getReplayHistoryBodyState(item) {
+    item = item || {};
+    var fields = item.bodyFields || [];
+    var type = normalizeReplayBodyType(item.bodyType || 'raw');
+    if (type === 'raw' && item.headersText) {
+      var inferred = replayBodyStateFromRaw(item.body || '', item.headersText || '');
+      type = inferred.type;
+      fields = inferred.fields;
+    }
+    if (type === 'urlencoded' && !fields.length && item.body) fields = parseUrlEncodedRows(item.body);
+    if (type === 'multipart' && !fields.length && item.body) fields = parseMultipartRowsFromRaw(item.body, item.headersText || '');
+    return normalizeReplayBodyState({
+      type: type,
+      raw: item.body || '',
+      fields: fields
+    });
+  }
+
+  function serializeReplayBodyState(state) {
+    var normalized = normalizeReplayBodyState(state);
+    return {
+      type: normalized.type,
+      raw: replayBodyStateToText(normalized),
+      fields: normalized.fields.map(function(item) {
+        if (normalized.type === 'multipart') {
+          return {
+            key: item.key || '',
+            type: item.type === 'file' ? 'file' : 'text',
+            value: item.type === 'file' ? '' : String(item.value === undefined || item.value === null ? '' : item.value),
+            fileName: replayMultipartFileName(item),
+            fileSize: replayMultipartFileSize(item),
+            contentType: item.contentType || ''
+          };
+        }
+        return { key: item.key || '', value: String(item.value || '') };
+      })
+    };
+  }
+
+  function postDataParamsFromReplayBodyState(state) {
+    var normalized = normalizeReplayBodyState(state);
+    if (normalized.type === 'urlencoded') {
+      return normalizeReplayUrlEncodedRows(normalized.fields).map(function(item) {
+        return { key: item.key, name: item.key, value: item.value, type: 'text' };
+      });
+    }
+    if (normalized.type === 'multipart') {
+      return normalizeReplayMultipartRows(normalized.fields).map(function(item) {
+        if (item.type === 'file') {
+          var fileName = replayMultipartFileName(item);
+          return { key: item.key, name: item.key, value: '', fileName: fileName, filename: fileName, fileSize: replayMultipartFileSize(item), contentType: item.contentType || '', type: 'file' };
+        }
+        return { key: item.key, name: item.key, value: item.value === undefined || item.value === null ? '' : item.value, type: 'text' };
+      });
+    }
+    return [];
+  }
+
+  function replayBodySignature(state) {
+    var serialized = serializeReplayBodyState(state);
+    return JSON.stringify(serialized);
+  }
+
+  function replayBodyStateToText(state) {
+    state = state || {};
+    var type = normalizeReplayBodyType(state.type || state.bodyType);
+    var raw = state.raw !== undefined ? String(state.raw || '') : String(state.body || '');
+    var fields = state.fields || state.bodyFields || [];
+    if (type === 'urlencoded') {
+      var urlencodedRows = normalizeReplayUrlEncodedRows(fields);
+      if (!urlencodedRows.length) return raw;
+      var params = new URLSearchParams();
+      urlencodedRows.forEach(function(item) {
+        if (!item.key) return;
+        params.append(item.key, item.value === undefined || item.value === null ? '' : item.value);
+      });
+      return params.toString();
+    }
+    if (type === 'multipart') {
+      var multipartRows = normalizeReplayMultipartRows(fields);
+      if (!multipartRows.length) return raw;
+      return multipartRows.filter(function(item) {
+        return item.key || item.value || replayMultipartFileName(item);
+      }).map(function(item) {
+        if (item.type === 'file') return (item.key || tt('(未命名字段)', '(Unnamed field)')) + '=@' + (replayMultipartFileName(item) || tt('(未选择文件)', '(No file selected)'));
+        return (item.key || tt('(未命名字段)', '(Unnamed field)')) + '=' + String(item.value === undefined || item.value === null ? '' : item.value);
+      }).join('\n');
+    }
+    return raw;
+  }
+
+  function readReplayUrlEncodedRows() {
+    if (!replayUrlEncodedRows) return [];
+    var rows = [];
+    replayUrlEncodedRows.querySelectorAll('.replay-form-row').forEach(function(row) {
+      var keyInput = row.querySelector('[data-role="key"]');
+      var valueInput = row.querySelector('[data-role="value"]');
+      var key = keyInput ? keyInput.value.trim() : '';
+      var value = valueInput ? valueInput.value : '';
+      if (!key && !value) return;
+      rows.push({ key: key, value: value });
+    });
+    return normalizeReplayUrlEncodedRows(rows);
+  }
+
+  function readReplayMultipartRows(options) {
+    options = options || {};
+    if (!replayMultipartRows) return [];
+    var rows = [];
+    replayMultipartRows.querySelectorAll('.replay-form-row').forEach(function(row) {
+      var keyInput = row.querySelector('[data-role="key"]');
+      var typeSelect = row.querySelector('[data-role="fieldType"]');
+      var valueInput = row.querySelector('[data-role="value"]');
+      var fileInput = row.querySelector('[data-role="file"]');
+      var key = keyInput ? keyInput.value.trim() : '';
+      var type = typeSelect && typeSelect.value === 'file' ? 'file' : 'text';
+      var file = fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+      var fileName = file ? file.name : (row.dataset.fileName || '');
+      var fileSize = file ? file.size : (row.dataset.fileSize === '0' ? 0 : (row.dataset.fileSize || ''));
+      var contentType = file ? file.type : (row.dataset.contentType || '');
+      var value = valueInput ? valueInput.value : '';
+      if (!key && !value && !fileName && !file) return;
+      var item = { key: key, type: type, value: type === 'text' ? value : '', fileName: fileName, fileSize: fileSize, contentType: contentType };
+      if (options.includeFiles && file) item.file = file;
+      rows.push(item);
+    });
+    return normalizeReplayMultipartRows(rows);
+  }
+
+  function normalizeReplayUrlEncodedRows(rows) {
+    return (rows || []).map(function(item) {
+      item = item || {};
+      return {
+        key: String(item.key || '').trim(),
+        value: String(item.value === undefined || item.value === null ? '' : item.value)
+      };
+    }).filter(function(item) {
+      return item.key || item.value;
+    });
+  }
+
+  function normalizeReplayMultipartRows(rows) {
+    return (rows || []).map(function(item) {
+      item = item || {};
+      var file = item.file || null;
+      return {
+        key: String(item.key || '').trim(),
+        type: item.type === 'file' ? 'file' : 'text',
+        value: item.type === 'file' ? '' : String(item.value === undefined || item.value === null ? '' : item.value),
+        fileName: file ? file.name : String(item.fileName || ''),
+        fileSize: file ? file.size : (item.fileSize === 0 ? 0 : (item.fileSize || '')),
+        contentType: file ? file.type : String(item.contentType || ''),
+        file: file
+      };
+    }).filter(function(item) {
+      return item.key || item.value || replayMultipartFileName(item);
+    });
+  }
+
+  function parseUrlEncodedRows(raw) {
+    raw = String(raw || '').trim();
+    if (!raw || raw.indexOf('=') === -1) return [];
+    var rows = [];
+    try {
+      var params = new URLSearchParams(raw);
+      params.forEach(function(value, key) {
+        rows.push({ key: key, value: value });
+      });
+    } catch (e) {
+      raw.split('&').forEach(function(pair) {
+        if (!pair) return;
+        var idx = pair.indexOf('=');
+        var key = idx >= 0 ? pair.slice(0, idx) : pair;
+        var value = idx >= 0 ? pair.slice(idx + 1) : '';
+        try { key = decodeURIComponent(key.replace(/\+/g, ' ')); } catch (err) {}
+        try { value = decodeURIComponent(value.replace(/\+/g, ' ')); } catch (err2) {}
+        rows.push({ key: key, value: value });
+      });
+    }
+    return normalizeReplayUrlEncodedRows(rows);
+  }
+
+  function parseMultipartRowsFromRaw(raw, headersText) {
+    raw = String(raw || '');
+    if (!raw) return [];
+    var headers = parseHeadersText(headersText || '');
+    var contentType = String(getHeaderCaseInsensitive(headers, 'content-type') || '');
+    var boundaryMatch = contentType.match(/boundary=(?:(?:"([^"]+)")|([^;]+))/i);
+    if (!boundaryMatch) return [];
+    var boundary = (boundaryMatch[1] || boundaryMatch[2] || '').trim();
+    if (!boundary) return [];
+    var rows = [];
+    raw.split('--' + boundary).forEach(function(part) {
+      part = part.replace(/^\r?\n/, '').replace(/\r?\n$/, '');
+      if (!part || part === '--') return;
+      var separator = part.indexOf('\r\n\r\n');
+      var separatorLength = 4;
+      if (separator === -1) {
+        separator = part.indexOf('\n\n');
+        separatorLength = 2;
+      }
+      if (separator === -1) return;
+      var headerText = part.slice(0, separator);
+      var body = part.slice(separator + separatorLength).replace(/\r?\n$/, '');
+      var dispositionLine = headerText.split(/\r?\n/).find(function(line) {
+        return /^content-disposition:/i.test(line);
+      }) || '';
+      var nameMatch = dispositionLine.match(/name="([^"]*)"/i);
+      var fileMatch = dispositionLine.match(/filename="([^"]*)"/i);
+      var key = nameMatch ? nameMatch[1] : '';
+      if (!key) return;
+      if (fileMatch) rows.push({ key: key, type: 'file', fileName: fileMatch[1] || '' });
+      else rows.push({ key: key, type: 'text', value: body });
+    });
+    return normalizeReplayMultipartRows(rows);
+  }
+
+  function renderReplayUrlEncodedRows(rows) {
+    if (!replayUrlEncodedRows) return;
+    rows = normalizeReplayUrlEncodedRows(rows);
+    if (!rows.length) rows = [{ key: '', value: '' }];
+    replayUrlEncodedRows.innerHTML = rows.map(function(item, index) {
+      return '<div class="replay-form-row" data-row-index="' + index + '">' +
+        '<input class="form-input" data-role="key" type="text" placeholder="' + escAttr(t('replay.fieldName')) + '" value="' + escAttr(item.key || '') + '">' +
+        '<input class="form-input" data-role="value" type="text" placeholder="' + escAttr(t('replay.fieldValue')) + '" value="' + escAttr(item.value || '') + '">' +
+        '<button class="btn btn-secondary btn-sm replay-form-delete" data-action="delete-urlencoded-row" type="button">' + escHtml(t('common.delete')) + '</button>' +
+      '</div>';
+    }).join('');
+  }
+
+  function renderReplayMultipartRows(rows) {
+    if (!replayMultipartRows) return;
+    rows = normalizeReplayMultipartRows(rows);
+    if (!rows.length) rows = [{ key: '', type: 'text', value: '' }];
+    replayMultipartRows.innerHTML = rows.map(function(item, index) {
+      var type = item.type === 'file' ? 'file' : 'text';
+      var fileName = replayMultipartFileName(item);
+      var fileSize = replayMultipartFileSize(item);
+      var fileHint = fileName ? t('replay.fileSaved', { name: fileName, size: fileSize ? ' (' + fileSize + ' bytes)' : '' }) : t('replay.noFile');
+      return '<div class="replay-form-row multipart" data-row-index="' + index + '" data-file-name="' + escAttr(fileName) + '" data-file-size="' + escAttr(fileSize) + '" data-content-type="' + escAttr(item.contentType || '') + '">' +
+        '<input class="form-input" data-role="key" type="text" placeholder="' + escAttr(t('replay.fieldName')) + '" value="' + escAttr(item.key || '') + '">' +
+        '<select class="form-select" data-role="fieldType">' +
+          '<option value="text"' + (type === 'text' ? ' selected' : '') + '>' + escHtml(t('replay.text')) + '</option>' +
+          '<option value="file"' + (type === 'file' ? ' selected' : '') + '>' + escHtml(t('replay.file')) + '</option>' +
+        '</select>' +
+        '<div class="replay-form-file-wrap">' +
+          '<input class="form-input" data-role="value" type="text" placeholder="' + escAttr(t('replay.fieldValue')) + '" value="' + escAttr(type === 'text' ? (item.value || '') : '') + '"' + (type === 'file' ? ' hidden' : '') + '>' +
+          '<div data-role="fileWrap"' + (type === 'file' ? '' : ' hidden') + '>' +
+            '<input class="replay-form-file-input" data-role="file" type="file">' +
+            '<div class="replay-form-file-hint" data-role="fileHint">' + escHtml(fileHint) + '</div>' +
+          '</div>' +
+        '</div>' +
+        '<button class="btn btn-secondary btn-sm replay-form-delete" data-action="delete-multipart-row" type="button">' + escHtml(t('common.delete')) + '</button>' +
+      '</div>';
+    }).join('');
+  }
+
+  function addReplayUrlEncodedRow() {
+    if (!replayUrlEncodedRows) return;
+    var index = replayUrlEncodedRows.querySelectorAll('.replay-form-row').length;
+    replayUrlEncodedRows.insertAdjacentHTML('beforeend', '<div class="replay-form-row" data-row-index="' + index + '">' +
+      '<input class="form-input" data-role="key" type="text" placeholder="' + escAttr(t('replay.fieldName')) + '" value="">' +
+      '<input class="form-input" data-role="value" type="text" placeholder="' + escAttr(t('replay.fieldValue')) + '" value="">' +
+      '<button class="btn btn-secondary btn-sm replay-form-delete" data-action="delete-urlencoded-row" type="button">' + escHtml(t('common.delete')) + '</button>' +
+    '</div>');
+    var added = replayUrlEncodedRows.querySelector('.replay-form-row:last-child [data-role="key"]');
+    if (added) added.focus();
+    syncReplayBodyDraftFromEditor();
+  }
+
+  function addReplayMultipartRow() {
+    if (!replayMultipartRows) return;
+    var index = replayMultipartRows.querySelectorAll('.replay-form-row').length;
+    replayMultipartRows.insertAdjacentHTML('beforeend', '<div class="replay-form-row multipart" data-row-index="' + index + '" data-file-name="" data-file-size="" data-content-type="">' +
+      '<input class="form-input" data-role="key" type="text" placeholder="' + escAttr(t('replay.fieldName')) + '" value="">' +
+      '<select class="form-select" data-role="fieldType"><option value="text" selected>' + escHtml(t('replay.text')) + '</option><option value="file">' + escHtml(t('replay.file')) + '</option></select>' +
+      '<div class="replay-form-file-wrap">' +
+        '<input class="form-input" data-role="value" type="text" placeholder="' + escAttr(t('replay.fieldValue')) + '" value="">' +
+        '<div data-role="fileWrap" hidden><input class="replay-form-file-input" data-role="file" type="file"><div class="replay-form-file-hint" data-role="fileHint">' + escHtml(t('replay.noFile')) + '</div></div>' +
+      '</div>' +
+      '<button class="btn btn-secondary btn-sm replay-form-delete" data-action="delete-multipart-row" type="button">' + escHtml(t('common.delete')) + '</button>' +
+    '</div>');
+    var added = replayMultipartRows.querySelector('.replay-form-row:last-child [data-role="key"]');
+    if (added) added.focus();
+    syncReplayBodyDraftFromEditor();
+  }
+
+  function updateReplayMultipartRowMode(row) {
+    if (!row) return;
+    var typeSelect = row.querySelector('[data-role="fieldType"]');
+    var valueInput = row.querySelector('[data-role="value"]');
+    var fileWrap = row.querySelector('[data-role="fileWrap"]');
+    var isFile = typeSelect && typeSelect.value === 'file';
+    if (valueInput) valueInput.hidden = !!isFile;
+    if (fileWrap) fileWrap.hidden = !isFile;
+  }
+
+  function updateReplayMultipartFileHint(row) {
+    if (!row) return;
+    var fileInput = row.querySelector('[data-role="file"]');
+    var hint = row.querySelector('[data-role="fileHint"]');
+    var file = fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+    if (file) {
+      row.dataset.fileName = file.name;
+      row.dataset.fileSize = String(file.size || 0);
+      row.dataset.contentType = file.type || '';
+      if (hint) hint.textContent = t('replay.fileSelected', { name: file.name, size: file.size || 0 });
+      return;
+    }
+    if (hint) hint.textContent = row.dataset.fileName ? t('replay.fileSaved', { name: row.dataset.fileName, size: '' }) : t('replay.noFile');
+  }
+
+  function replayMultipartFileName(item) {
+    if (!item) return '';
+    return item.file && item.file.name ? item.file.name : String(item.fileName || '');
+  }
+
+  function replayMultipartFileSize(item) {
+    if (!item) return '';
+    if (item.file && typeof item.file.size === 'number') return item.file.size;
+    return item.fileSize === 0 ? 0 : (item.fileSize || '');
+  }
+
+  function getHeaderCaseInsensitive(headers, name) {
+    var wanted = String(name || '').toLowerCase();
+    var found = Object.keys(headers || {}).find(function(key) { return key.toLowerCase() === wanted; });
+    return found ? headers[found] : undefined;
+  }
+
+  function setHeaderCaseInsensitive(headers, name, value) {
+    headers = headers || {};
+    var wanted = String(name || '').toLowerCase();
+    var found = Object.keys(headers).find(function(key) { return key.toLowerCase() === wanted; });
+    if (found) headers[found] = value;
+    else headers[name] = value;
+  }
+
+  function removeHeaderCaseInsensitive(headers, name) {
+    var wanted = String(name || '').toLowerCase();
+    Object.keys(headers || {}).forEach(function(key) {
+      if (key.toLowerCase() === wanted) delete headers[key];
+    });
+  }
+
+  function normalizeReplayHeadersForBodyType(headers, type) {
+    type = normalizeReplayBodyType(type);
+    if (type === 'urlencoded') {
+      setHeaderCaseInsensitive(headers, 'Content-Type', 'application/x-www-form-urlencoded;charset=UTF-8');
+    }
+    if (type === 'multipart') {
+      removeHeaderCaseInsensitive(headers, 'Content-Type');
+      removeHeaderCaseInsensitive(headers, 'Content-Length');
+    }
+  }
+
+  function headersToEditorText(headers) {
+    return Object.keys(headers || {}).map(function(key) {
+      return key + ': ' + headers[key];
+    }).join('\n');
+  }
+
+  function buildReplayFetchBody(method, headers, bodyState) {
+    var normalized = normalizeReplayBodyState(bodyState);
+    var upperMethod = String(method || 'GET').toUpperCase();
+    if (upperMethod === 'GET' || upperMethod === 'HEAD') {
+      return { body: undefined, preview: '', state: normalized };
+    }
+    normalizeReplayHeadersForBodyType(headers, normalized.type);
+    if (normalized.type === 'urlencoded') {
+      var params = new URLSearchParams();
+      normalizeReplayUrlEncodedRows(normalized.fields).forEach(function(item) {
+        if (!item.key && item.value) throw new Error(tt('表单字段缺少字段名', 'Form field is missing a field name'));
+        if (!item.key) return;
+        params.append(item.key, item.value || '');
+      });
+      var encoded = params.toString();
+      return { body: encoded ? params : undefined, preview: encoded, state: normalized };
+    }
+    if (normalized.type === 'multipart') {
+      var form = new FormData();
+      var previews = [];
+      var hasField = false;
+      normalizeReplayMultipartRows(normalized.fields).forEach(function(item) {
+        if (!item.key) throw new Error(tt('文件上传字段缺少字段名', 'Upload field is missing a field name'));
+        if (item.type === 'file') {
+          if (!item.file) throw new Error(tt('请选择文件: {key}', 'Please choose a file: {key}', { key: item.key }));
+          form.append(item.key, item.file, item.file.name);
+          previews.push(item.key + '=@' + item.file.name);
+        } else {
+          form.append(item.key, item.value || '');
+          previews.push(item.key + '=' + String(item.value || ''));
+        }
+        hasField = true;
+      });
+      return { body: hasField ? form : undefined, preview: previews.join('\n'), state: normalized };
+    }
+    return { body: normalized.raw ? normalized.raw : undefined, preview: normalized.raw || '', state: normalized };
+  }
+
+  function formatReplayBody(mode) {
+    if (getReplayBodyType() !== 'raw') {
+      setReplayStatus(tt('只有“原始 / JSON”请求体可以格式化 JSON', 'Only Raw / JSON bodies can be formatted as JSON'), 'error');
+      return;
+    }
+    if (!replayBody || !replayBody.value.trim()) return;
+    try {
+      var parsed = JSON.parse(replayBody.value);
+      replayBody.value = mode === 'minify' ? JSON.stringify(parsed) : JSON.stringify(parsed, null, 2);
+      syncReplayBodyDraftFromEditor();
+      setReplayStatus(mode === 'minify' ? tt('请求体已压缩', 'Request body minified') : tt('请求体已格式化', 'Request body formatted'), 'success');
+    } catch(e) {
+      setReplayStatus(tt('请求体不是有效 JSON', 'Request body is not valid JSON'), 'error');
+    }
+  }
+
+  function buildCurlCommand(method, url, headers, bodyState) {
+    method = String(method || 'GET').toUpperCase();
+    headers = Object.assign({}, headers || {});
+    var normalized = normalizeReplayBodyState(bodyState);
+    normalizeReplayHeadersForBodyType(headers, normalized.type);
+    var parts = ['curl'];
+    parts.push('-X');
+    parts.push(shellEscape(method));
+    Object.keys(headers || {}).forEach(function(key) {
+      parts.push('-H');
+      parts.push(shellEscape(key + ': ' + headers[key]));
+    });
+    if (method !== 'GET' && method !== 'HEAD' && normalized.type === 'multipart') {
+      normalizeReplayMultipartRows(normalized.fields).forEach(function(item) {
+        if (!item.key) return;
+        parts.push('-F');
+        if (item.type === 'file') parts.push(shellEscape(item.key + '=@' + (replayMultipartFileName(item) || tt('选择文件', 'choose-file'))));
+        else parts.push(shellEscape(item.key + '=' + String(item.value || '')));
+      });
+    } else if (method !== 'GET' && method !== 'HEAD') {
+      var body = replayBodyStateToText(normalized);
+      if (body) {
+        parts.push('--data-raw');
+        parts.push(shellEscape(body));
+      }
+    }
+    parts.push(shellEscape(url));
+    return parts.join(' ');
+  }
+
+  function shellEscape(value) {
+    return "'" + String(value || '').replace(/'/g, "'\"'\"'") + "'";
+  }
+
+  function copyReplayCurl() {
+    var method = replayMethod && replayMethod.value ? replayMethod.value.toUpperCase() : 'GET';
+    var url = replayUrl ? replayUrl.value.trim() : '';
+    if (!url) {
+      setReplayStatus(tt('没有可复制的 URL', 'No URL to copy'), 'error');
+      showToast(tt('没有可复制的 URL', 'No URL to copy'), 'error');
+      return;
+    }
+    var curl = buildCurlCommand(method, url, parseHeadersText(replayHeaders ? replayHeaders.value : ''), captureReplayBodyState({ includeFiles: true }));
+    ApiStudioCompat.copyText(curl).then(function() {
+      setReplayStatus(tt('cURL 已复制', 'cURL copied'), 'success');
+      showToast(tt('cURL 已复制', 'cURL copied'));
+    }).catch(function(error) {
+      setReplayStatus(tt('复制失败: {message}', 'Copy failed: {message}', { message: error.message }), 'error');
+      showToast(tt('复制失败: {message}', 'Copy failed: {message}', { message: error.message }), 'error');
+    });
+  }
+
+  function loadReplayHistory() {
+    try {
+      replayHistory = JSON.parse(localStorage.getItem('apiStudioReplayHistory') || '[]');
+      if (!Array.isArray(replayHistory)) replayHistory = [];
+      var storedGroups = JSON.parse(localStorage.getItem('apiStudioReplayGroups') || '[]');
+      replayGroups = Array.isArray(storedGroups) && storedGroups.length ? storedGroups : [DEFAULT_REPLAY_GROUP];
+      replayHistory = replayHistory.map(function(item) {
+        item = item || {};
+        item.name = item.name || '';
+        item.group = normalizeReplayGroup(item.group);
+        if (replayGroups.indexOf(item.group) === -1) replayGroups.push(item.group);
+        item.label = item.label || ((item.method || 'GET') + ' ' + displayPath(item.url || ''));
+        item.fullLabel = item.fullLabel || ((item.method || 'GET') + ' ' + (item.url || ''));
+        item.timeText = item.timeText || '';
+        item.meta = item.meta || '';
+        var bodyState = getReplayHistoryBodyState(item);
+        item.bodyType = bodyState.type;
+        item.body = replayBodyStateToText(bodyState);
+        item.bodyFields = serializeReplayBodyState(bodyState).fields;
+        item.status = normalizeReplayStatus(item.status);
+        item.statusText = item.statusText || '';
+        item.totalTimeMs = normalizeReplayDurationMs(item.totalTimeMs || item.lastReplayDurationMs || 0);
+        return item;
+      });
+      replayGroups = uniqueReplayGroups([DEFAULT_REPLAY_GROUP].concat(replayGroups).concat(replayGroupsFromHistory(replayHistory)));
+      activeReplayGroup = normalizeReplayGroup(localStorage.getItem('apiStudioActiveReplayGroup') || DEFAULT_REPLAY_GROUP);
+      if (replayGroups.indexOf(activeReplayGroup) === -1) activeReplayGroup = replayGroups[0] || DEFAULT_REPLAY_GROUP;
+      persistReplayGroups();
+    } catch(e) {
+      replayHistory = [];
+      replayGroups = [DEFAULT_REPLAY_GROUP];
+      activeReplayGroup = DEFAULT_REPLAY_GROUP;
+    }
+  }
+
+  function normalizeReplayGroup(name) {
+    var value = String(name || '').trim();
+    return value || DEFAULT_REPLAY_GROUP;
+  }
+
+  function uniqueReplayGroups(list) {
+    var seen = {};
+    var next = [];
+    (list || []).forEach(function(name) {
+      var group = normalizeReplayGroup(name);
+      if (seen[group]) return;
+      seen[group] = true;
+      next.push(group);
+    });
+    if (next.indexOf(DEFAULT_REPLAY_GROUP) === -1) next.unshift(DEFAULT_REPLAY_GROUP);
+    return next;
+  }
+
+  function replayGroupsFromHistory(list) {
+    return (list || []).map(function(item) {
+      return normalizeReplayGroup(item.group);
+    });
+  }
+
+  function persistReplayGroups() {
+    replayGroups = uniqueReplayGroups(replayGroups);
+    try {
+      localStorage.setItem('apiStudioReplayGroups', JSON.stringify(replayGroups));
+      localStorage.setItem('apiStudioActiveReplayGroup', activeReplayGroup || DEFAULT_REPLAY_GROUP);
+    } catch(e) {}
+    syncReplayGroupInput();
+    renderReplayGroupDropdown();
+  }
+
+  function syncReplayGroupInput() {
+    if (replayGroupInput) {
+      replayGroupInput.value = activeReplayGroup || DEFAULT_REPLAY_GROUP;
+      replayGroupInput.title = activeReplayGroup || DEFAULT_REPLAY_GROUP;
+    }
+  }
+
+  function getFilteredReplayGroups() {
+    var query = replayGroupInput ? replayGroupInput.value.trim().toLowerCase() : '';
+    if (!query || query === String(activeReplayGroup || '').toLowerCase()) return replayGroups;
+    return replayGroups.filter(function(group) {
+      return group.toLowerCase().indexOf(query) !== -1;
+    });
+  }
+
+  function renderReplayGroupDropdown() {
+    if (!replayGroupDropdown) return;
+    var filtered = getFilteredReplayGroups();
+    if (filtered.length === 0) {
+      replayGroupDropdown.innerHTML = '<div class="g-empty">' + escHtml(tt('没有匹配的分组', 'No matching groups')) + '</div>';
+      return;
+    }
+    replayGroupDropdown.innerHTML = filtered.map(function(group) {
+      return '<div class="g-item' + (group === activeReplayGroup ? ' active' : '') + '" data-group="' + escAttr(group) + '" title="' + escAttr(group) + '">' +
+        '<span class="g-name">' + escHtml(group) + '</span>' +
+        (group === DEFAULT_REPLAY_GROUP ? '' : '<span class="g-actions"><button class="g-act g-act-del" data-action="delete-replay-group" title="' + escAttr(tt('删除分组', 'Delete group')) + '" type="button">' + escHtml(t('common.delete')) + '</button></span>') +
+      '</div>';
+    }).join('');
+  }
+
+  function openReplayGroupDropdown() {
+    if (!replayGroupDropdown || !replayGroupInput) return;
+    renderReplayGroupDropdown();
+    var rect = replayGroupInput.getBoundingClientRect();
+    replayGroupDropdown.style.left = rect.left + 'px';
+    replayGroupDropdown.style.top = (rect.bottom + 4) + 'px';
+    replayGroupDropdown.style.width = rect.width + 'px';
+    replayGroupDropdown.classList.add('show');
+  }
+
+  function closeReplayGroupDropdown() {
+    if (replayGroupDropdown) replayGroupDropdown.classList.remove('show');
+  }
+
+  function getVisibleReplayHistory() {
+    return replayHistory.filter(function(item) {
+      if (normalizeReplayGroup(item.group) !== activeReplayGroup) return false;
+      return matchesReplayHistorySearch(item);
+    });
+  }
+
+  function matchesReplayHistorySearch(item) {
+    if (!replayHistorySearchText) return true;
+    var name = String(item.name || item.label || '').toLowerCase();
+    return name.indexOf(replayHistorySearchText) !== -1;
+  }
+
+  function selectReplayGroup(name) {
+    activeReplayGroup = normalizeReplayGroup(name);
+    if (replayGroups.indexOf(activeReplayGroup) === -1) replayGroups.push(activeReplayGroup);
+    replayGroups = uniqueReplayGroups(replayGroups);
+    selectedReplayHistoryIds = {};
+    resetReplayHistorySearch();
+    syncReplayGroupInput();
+    renderReplayGroupDropdown();
+    closeReplayGroupDropdown();
+    persistReplayGroups();
+    renderReplayHistory();
+    loadFirstVisibleReplayHistory();
+  }
+
+  function createReplayGroup(name) {
+    var next = normalizeReplayGroup(name);
+    if (!next) return;
+    selectReplayGroup(next);
+    showToast(tt('已切换到分组：{name}', 'Switched to group: {name}', { name: next }));
+  }
+
+  async function deleteReplayGroup(name) {
+    var group = normalizeReplayGroup(name);
+    if (group === DEFAULT_REPLAY_GROUP) {
+      showToast(tt('默认分组不能删除', 'The default group cannot be deleted'), 'error');
+      return;
+    }
+    var itemCount = replayHistory.filter(function(item) {
+      return normalizeReplayGroup(item.group) === group;
+    }).length;
+    var message = itemCount > 0
+      ? tt('删除分组「{name}」？该分组下的 {count} 条保存请求会移动到默认分组。', 'Delete group "{name}"? {count} saved requests in it will be moved to the default group.', { name: group, count: itemCount })
+      : tt('删除分组「{name}」？', 'Delete group "{name}"?', { name: group });
+    if (!await appConfirm(tt('删除分组', 'Delete group'), message, t('common.delete'))) return;
+
+    replayGroups = replayGroups.filter(function(item) {
+      return normalizeReplayGroup(item) !== group;
+    });
+    replayGroups = uniqueReplayGroups(replayGroups);
+    replayHistory.forEach(function(item) {
+      if (normalizeReplayGroup(item.group) === group) item.group = DEFAULT_REPLAY_GROUP;
+    });
+    if (activeReplayGroup === group) activeReplayGroup = DEFAULT_REPLAY_GROUP;
+    selectedReplayHistoryIds = {};
+    resetReplayHistorySearch();
+    persistReplayGroups();
+    persistReplayHistory();
+    renderReplayHistory();
+    loadFirstVisibleReplayHistory();
+    showToast(tt('分组已删除', 'Group deleted'));
+  }
+
+  async function moveReplayHistoryToGroup(id) {
+    var item = replayHistory.find(function(entry) { return entry.id === id; });
+    if (!item) return;
+    var currentGroup = normalizeReplayGroup(item.group);
+    var targets = replayGroups.filter(function(group) {
+      return normalizeReplayGroup(group) !== currentGroup;
+    });
+    if (targets.length === 0) {
+      showToast(tt('暂无其他已有分组可转移', 'No other existing groups to move to'), 'error');
+      return;
+    }
+
+    var target = await appSelect(tt('转移分组', 'Move to group'), tt('选择要转移到的已有分组', 'Choose an existing group to move to'), targets);
+    if (target === null) return;
+    if (!target) {
+      showToast(tt('没有找到这个已有分组', 'This existing group was not found'), 'error');
+      return;
+    }
+    item.group = normalizeReplayGroup(target);
+    delete selectedReplayHistoryIds[id];
+    persistReplayHistory();
+    renderReplayHistory();
+    loadFirstVisibleReplayHistory();
+    showToast(tt('已转移到分组：{name}', 'Moved to group: {name}', { name: item.group }));
+  }
+
+  function resetReplayHistorySearch() {
+    replayHistorySearchText = '';
+    if (replayHistorySearchInput) replayHistorySearchInput.value = '';
+  }
+
+  function loadFirstVisibleReplayHistory() {
+    var firstHistory = getVisibleReplayHistory()[0];
+    if (firstHistory) {
+      applyReplayHistoryItem(firstHistory.id);
+      return;
+    }
+    setText('replaySourceText', activeReplayGroup || DEFAULT_REPLAY_GROUP);
+  }
+
+  function saveReplayHistoryEntry(entry) {
+    replayHistory = replayHistory.filter(function(item) { return item.id !== entry.id; });
+    replayHistory.unshift(entry);
+    if (replayHistory.length > 100) replayHistory.length = 100;
+    persistReplayHistory();
+    renderReplayHistory();
+  }
+
+  function saveCurrentReplayRequest() {
+    var method = replayMethod && replayMethod.value ? replayMethod.value.toUpperCase() : 'GET';
+    var url = replayUrl ? replayUrl.value.trim() : '';
+    var headersText = replayHeaders ? replayHeaders.value : '';
+    var bodyState = captureReplayBodyState({ includeFiles: true });
+    var normalizedHeaders = parseHeadersText(headersText);
+    normalizeReplayHeadersForBodyType(normalizedHeaders, bodyState.type);
+    headersText = headersToEditorText(normalizedHeaders);
+    if (replayHeaders) replayHeaders.value = headersText;
+    var serializedBody = serializeReplayBodyState(bodyState);
+    var body = serializedBody.raw;
+    if (!url) {
+      setReplayStatus(tt('没有可保存的 URL', 'No URL to save'), 'error');
+      showToast(tt('没有可保存的 URL', 'No URL to save'), 'error');
+      return;
+    }
+    var existing = replayHistory.find(function(item) {
+      return (item.group || DEFAULT_REPLAY_GROUP) === (activeReplayGroup || DEFAULT_REPLAY_GROUP) &&
+        isReplayHistorySameRequest(item, method, url, headersText, bodyState);
+    });
+    var sourceReq = getReplaySourceForCurrentForm(method, url, headersText, bodyState);
+    var sourceStatus = normalizeReplayStatus(sourceReq && sourceReq.status);
+    var sourceDuration = getReplayRequestDurationMs(sourceReq);
+    var requestLine = method + ' ' + displayPath(url);
+    var defaultName = existing && existing.name ? existing.name : requestLine;
+    appPrompt(tt('保存请求', 'Save request'), tt('给这个请求起个名字，之后左侧列表会显示这个名字。', 'Name this request. The name will appear in the left list.'), defaultName).then(function(inputName) {
+      if (inputName === null) return;
+      var name = String(inputName || '').trim() || requestLine;
+      saveReplayHistoryEntry({
+        id: existing ? existing.id : 'saved_' + Date.now(),
+        name: name,
+        label: name,
+        fullLabel: name + ' · ' + method + ' ' + url,
+        meta: requestLine,
+        timeText: formatDateTime(new Date()),
+        group: activeReplayGroup || DEFAULT_REPLAY_GROUP,
+        method: method,
+        url: url,
+        headersText: headersText,
+        body: body,
+        bodyType: serializedBody.type,
+        bodyFields: serializedBody.fields,
+        status: sourceStatus || (existing ? normalizeReplayStatus(existing.status) : 0),
+        statusText: sourceReq ? (sourceReq.statusText || '') : ((existing && existing.statusText) || ''),
+        totalTimeMs: sourceDuration || (existing ? normalizeReplayDurationMs(existing.totalTimeMs || existing.lastReplayDurationMs || 0) : 0)
+      });
+      setText('replaySourceText', requestLine);
+      setReplayStatus(existing ? tt('保存请求已更新', 'Saved request updated') : tt('请求已保存', 'Request saved'), 'success');
+      showToast(existing ? tt('保存请求已更新', 'Saved request updated') : tt('请求已保存', 'Request saved'));
+    });
+  }
+
+  function persistReplayHistory() {
+    try { localStorage.setItem('apiStudioReplayHistory', JSON.stringify(replayHistory)); } catch(e) {}
+  }
+
+  function renderReplayHistory() {
+    if (!replayHistoryList) return;
+    syncReplayGroupInput();
+    var activeId = null;
+    var selectedKeys = {};
+    var visibleHistory = getVisibleReplayHistory();
+    Object.keys(selectedReplayHistoryIds).forEach(function(id) { selectedKeys[id] = true; });
+    if (visibleHistory.length === 0) {
+      replayHistoryList.innerHTML = '<div class="replay-history-empty">' + escHtml(replayHistorySearchText ? t('replay.noSavedMatched') : t('replay.noSavedInGroup')) + '</div>';
+      syncReplayHistorySelection();
+      return;
+    }
+    if (replayMethod && replayUrl) {
+      var currentMethod = replayMethod.value || 'GET';
+      var currentUrl = replayUrl.value.trim();
+      var currentHeaders = replayHeaders ? replayHeaders.value : '';
+      var currentBody = captureReplayBodyState({ includeFiles: true });
+      var activeItem = visibleHistory.find(function(item) {
+        return isReplayHistorySameRequest(item, currentMethod, currentUrl, currentHeaders, currentBody);
+      });
+      activeId = activeItem ? activeItem.id : null;
+    }
+    replayHistoryList.innerHTML = visibleHistory.map(function(item, index) {
+      var pathText = displayPath(item.url || '');
+      var nameText = replayHistoryNameText(item);
+      var displayNameText = truncateReplayHistoryName(nameText);
+      return '<div class="replay-history-item' + (activeId === item.id ? ' active' : '') + (selectedKeys[item.id] ? ' batch-selected' : '') + '" data-history-id="' + escAttr(item.id) + '">' +
+        '<div class="replay-history-side">' +
+          '<label class="replay-history-select" title="' + escAttr(t('common.select')) + '"><input type="checkbox" data-history-id="' + escAttr(item.id) + '"' + (selectedKeys[item.id] ? ' checked' : '') + '></label>' +
+          '<span class="replay-history-index">' + (index + 1) + '</span>' +
+        '</div>' +
+        '<div class="replay-history-main">' +
+          '<div class="replay-history-path" title="' + escAttr(pathText || '-') + '">' + escHtml(pathText || '-') + '</div>' +
+          '<div class="replay-history-meta-row">' +
+            '<div class="replay-history-name" title="' + escAttr(nameText) + '">' + escHtml(displayNameText) + '</div>' +
+            '<div class="replay-history-actions">' +
+              '<button type="button" class="replay-history-action" data-action="rename" data-history-id="' + escAttr(item.id) + '" title="' + escAttr(tt('重命名', 'Rename')) + '">' + escHtml(tt('命名', 'Name')) + '</button>' +
+              '<button type="button" class="replay-history-action" data-action="move" data-history-id="' + escAttr(item.id) + '" title="' + escAttr(tt('转移分组', 'Move group')) + '">' + escHtml(t('common.move')) + '</button>' +
+              '<button type="button" class="replay-history-action danger" data-action="delete" data-history-id="' + escAttr(item.id) + '" title="' + escAttr(t('common.delete')) + '">' + escHtml(t('common.delete')) + '</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+    syncReplayHistorySelection();
+    reFindReplayIfNeeded();
+  }
+
+  function applyReplayHistoryItem(id) {
+    var item = replayHistory.find(function(entry) { return entry.id === id; });
+    if (!item) return;
+    clearReplaySourceRequest();
+    if (replayMethod) replayMethod.value = item.method || 'GET';
+    if (replayUrl) replayUrl.value = item.url || '';
+    if (replayHeaders) replayHeaders.value = item.headersText || '';
+    applyReplayBodyState(getReplayHistoryBodyState(item));
+    setText('replaySourceText', (item.method || 'GET') + ' ' + displayPath(item.url || ''));
+    renderReplayResult(null);
+    if (replayHistoryList) {
+      replayHistoryList.querySelectorAll('.replay-history-item').forEach(function(node) {
+        node.classList.toggle('active', node.dataset.historyId === id);
+      });
+    }
+    setReplayStatus(tt('已载入保存请求', 'Saved request loaded'), 'success');
+  }
+
+  function renameReplayHistoryEntry(id) {
+    var item = replayHistory.find(function(entry) { return entry.id === id; });
+    if (!item) return;
+    var requestLine = (item.method || 'GET') + ' ' + displayPath(item.url || '');
+    appPrompt(tt('重命名保存请求', 'Rename saved request'), tt('给这个请求起个更好记的名字。', 'Give this request a more memorable name.'), item.name || item.label || requestLine).then(function(inputName) {
+      if (inputName === null) return;
+      var name = String(inputName || '').trim() || requestLine;
+      item.name = name;
+      item.label = name;
+      item.fullLabel = name + ' · ' + (item.method || 'GET') + ' ' + (item.url || '');
+      item.meta = item.meta || requestLine;
+      persistReplayHistory();
+      renderReplayHistory();
+      setReplayStatus(tt('保存请求已重命名', 'Saved request renamed'), 'success');
+      showToast(tt('保存请求已重命名', 'Saved request renamed'));
+    });
+  }
+
+  var replayFindTextControlIds = ['replayHeaders', 'replayBody'];
+
+  function doReplayFind(text, options) {
+    options = options || {};
+    var passive = !!options.passive;
+    var preserveIndex = typeof options.preserveIndex === 'number' ? options.preserveIndex : -1;
+    clearReplayFindHighlights();
+    replayFindMatches = [];
+    replayFindIdx = -1;
+    if (!replayFindCount) return;
+    if (!text) {
+      replayFindCount.textContent = '0/0';
+      return;
+    }
+
+    var lower = String(text).toLowerCase();
+    var re = new RegExp('(' + escapeRegExp(text) + ')', 'gi');
+    [
+      'replaySourceText',
+      'replayMethod',
+      'replayUrl',
+      'replayHeaders',
+      'replayBody',
+      'replayResultStatus',
+      'replayResultTime',
+      'replayResultContentType',
+      'replayResultHeaders',
+      'replayResultBody'
+    ].forEach(function(id) {
+      var el = $(id);
+      if (!el) return;
+      var rawText = getFindElementText(el);
+      if (!rawText || rawText.toLowerCase().indexOf(lower) === -1) return;
+
+      if (el.tagName === 'TEXTAREA') {
+        var ranges = getTextMatchRanges(rawText, lower);
+        el.__replayFindRanges = ranges;
+        renderFindTextControl(el, ranges, -1);
+        ranges.forEach(function(range, inputIndex) {
+          replayFindMatches.push({
+            el: el,
+            isInput: true,
+            isTextControl: true,
+            inputIndex: inputIndex,
+            start: range.start,
+            end: range.end
+          });
+        });
+        return;
+      }
+
+      if (el.tagName === 'INPUT') {
+        getTextMatchRanges(rawText, lower).forEach(function(range) {
+          replayFindMatches.push({
+            el: el,
+            isInput: true,
+            start: range.start,
+            end: range.end
+          });
+        });
+        return;
+      }
+
+      if (el.tagName === 'SELECT') {
+        replayFindMatches.push({ el: el, isControl: true });
+        return;
+      }
+
+      el.innerHTML = rawText.replace(re, '<span class="find-match">$1</span>');
+      el.querySelectorAll('.find-match').forEach(function(span) {
+        replayFindMatches.push({ el: el, span: span });
+      });
+    });
+
+    replayHistory.forEach(function(item) {
+      if ((item.fullLabel || item.label || '').toLowerCase().indexOf(lower) === -1 && String(item.url || '').toLowerCase().indexOf(lower) === -1) return;
+      var row = replayHistoryList ? replayHistoryList.querySelector('[data-history-id="' + cssEscape(item.id) + '"]') : null;
+      if (row) replayFindMatches.push({ el: row, isHistory: true });
+    });
+
+    if (replayFindMatches.length > 0) {
+      replayFindIdx = preserveIndex >= 0 ? Math.min(preserveIndex, replayFindMatches.length - 1) : 0;
+    }
+    updateReplayFindUI({ passive: passive, keepFindFocus: !!options.keepFindFocus });
+    if (replayFindIdx >= 0 && !passive) scrollToReplayMatch(replayFindIdx, { keepFindFocus: !!options.keepFindFocus });
+  }
+
+  function clearReplayFindHighlights() {
+    ['replaySourceText', 'replayResultStatus', 'replayResultTime', 'replayResultContentType', 'replayResultHeaders', 'replayResultBody'].forEach(function(id) {
+      var el = $(id);
+      if (el && el.innerHTML !== el.textContent) el.innerHTML = el.textContent;
+    });
+    replayFindTextControlIds.forEach(function(id) {
+      clearFindTextControl($(id));
+    });
+    if (replayHistoryList) {
+      replayHistoryList.querySelectorAll('.find-active-row').forEach(function(node) {
+        node.classList.remove('find-active-row');
+      });
+    }
+  }
+
+  function updateReplayFindUI(options) {
+    options = options || {};
+    if (replayFindCount) replayFindCount.textContent = (replayFindIdx >= 0 ? replayFindIdx + 1 : 0) + '/' + replayFindMatches.length;
+    document.querySelectorAll('#tabReplay .find-match').forEach(function(el) { el.classList.remove('find-active'); });
+    document.querySelectorAll('#tabReplay .find-active-row').forEach(function(el) { el.classList.remove('find-active-row'); });
+
+    var current = replayFindMatches[replayFindIdx];
+    replayFindTextControlIds.forEach(function(id) {
+      var el = $(id);
+      var activeIndex = current && current.isTextControl && current.el === el ? current.inputIndex : -1;
+      renderFindTextControl(el, (el && el.__replayFindRanges) || [], activeIndex);
+    });
+
+    if (!current) return;
+    if (current.span) current.span.classList.add('find-active');
+    if (current.isHistory && current.el) current.el.classList.add('find-active-row');
+    if (!options.passive && !options.keepFindFocus && current.isInput && current.el && typeof current.start === 'number' && typeof current.end === 'number') {
+      focusTextRange(current.el, current.start, current.end);
+    }
+  }
+
+  function scrollToReplayMatch(idx, options) {
+    options = options || {};
+    if (idx < 0 || idx >= replayFindMatches.length) return;
+    replayFindIdx = idx;
+    updateReplayFindUI({ passive: false, keepFindFocus: !!options.keepFindFocus });
+    var match = replayFindMatches[idx];
+    if (!match) return;
+
+    if (match.isTextControl) {
+      scrollTextControlToMatch(match, options);
+      return;
+    }
+    if (match.span && match.span.scrollIntoView) {
+      match.span.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+      restoreFindFocus(options);
+      return;
+    }
+    if (match.el && match.el.scrollIntoView) {
+      match.el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+    }
+    if (!options.keepFindFocus && match.isInput && match.el && typeof match.start === 'number' && typeof match.end === 'number') {
+      focusTextRange(match.el, match.start, match.end);
+    }
+    restoreFindFocus(options);
+  }
+
+  function navigateReplayFind(direction) {
+    if (!replayFindInput || !replayFindInput.value) return;
+    var oldIdx = replayFindIdx;
+    var keepFindFocus = document.activeElement === replayFindInput;
+    doReplayFind(replayFindInput.value, { passive: true, preserveIndex: oldIdx });
+    if (replayFindMatches.length === 0) return;
+    if (oldIdx >= 0 && oldIdx < replayFindMatches.length) replayFindIdx = oldIdx;
+    replayFindIdx = direction < 0
+      ? (replayFindIdx <= 0 ? replayFindMatches.length - 1 : replayFindIdx - 1)
+      : (replayFindIdx >= replayFindMatches.length - 1 ? 0 : replayFindIdx + 1);
+    scrollToReplayMatch(replayFindIdx, { keepFindFocus: keepFindFocus });
+  }
+
+  function reFindReplayIfNeeded() {
+    if (replayFindInput && replayFindInput.value) doReplayFind(replayFindInput.value, { passive: true, preserveIndex: replayFindIdx });
+  }
+
+  function getFindElementText(el) {
+    if (!el) return '';
+    if (el.tagName === 'SELECT') return el.value || '';
+    if ('value' in el) return String(el.value || '');
+    return String(el.textContent || '');
+  }
+
+  function escapeRegExp(text) {
+    return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  function getTextMatchRanges(text, lowerNeedle) {
+    var ranges = [];
+    if (!text || !lowerNeedle) return ranges;
+    var lowerText = String(text).toLowerCase();
+    var start = 0;
+    while (start < lowerText.length) {
+      var idx = lowerText.indexOf(lowerNeedle, start);
+      if (idx === -1) break;
+      ranges.push({ start: idx, end: idx + lowerNeedle.length });
+      start = idx + Math.max(1, lowerNeedle.length);
+    }
+    return ranges;
+  }
+
+  function ensureFindTextControl(el) {
+    if (!el || el.__findHighlightLayer) return el ? el.__findHighlightLayer : null;
+    var wrap = document.createElement('div');
+    wrap.className = 'find-textarea-wrap';
+    var layer = document.createElement('pre');
+    layer.className = 'find-textarea-highlight';
+    el.parentNode.insertBefore(wrap, el);
+    wrap.appendChild(layer);
+    wrap.appendChild(el);
+    el.__findHighlightWrap = wrap;
+    el.__findHighlightLayer = layer;
+    el.addEventListener('scroll', function() {
+      syncFindTextControlScroll(el);
+    });
+    return layer;
+  }
+
+  function renderFindTextControl(el, ranges, activeIndex) {
+    if (!el) return;
+    var layer = ensureFindTextControl(el);
+    var wrap = el.__findHighlightWrap;
+    ranges = ranges || [];
+    el.__replayFindRanges = ranges;
+    if (!layer || !wrap || ranges.length === 0) {
+      clearFindTextControl(el);
+      return;
+    }
+    var text = String(el.value || '');
+    var html = '';
+    var pos = 0;
+    ranges.forEach(function(range, index) {
+      html += escHtml(text.slice(pos, range.start));
+      html += '<span class="find-match' + (index === activeIndex ? ' find-active' : '') + '" data-find-input-index="' + index + '">' + escHtml(text.slice(range.start, range.end)) + '</span>';
+      pos = range.end;
+    });
+    html += escHtml(text.slice(pos)) || '&nbsp;';
+    layer.innerHTML = html;
+    wrap.classList.add('find-textarea-active');
+    syncFindTextControlScroll(el);
+  }
+
+  function clearFindTextControl(el) {
+    if (!el) return;
+    el.__replayFindRanges = [];
+    if (el.__findHighlightLayer) el.__findHighlightLayer.textContent = '';
+    if (el.__findHighlightWrap) el.__findHighlightWrap.classList.remove('find-textarea-active');
+  }
+
+  function syncFindTextControlScroll(el) {
+    if (!el || !el.__findHighlightLayer) return;
+    el.__findHighlightLayer.scrollTop = el.scrollTop;
+    el.__findHighlightLayer.scrollLeft = el.scrollLeft;
+  }
+
+  function scrollTextControlToMatch(match, options) {
+    options = options || {};
+    var el = match.el;
+    if (!el) return;
+    var layer = ensureFindTextControl(el);
+    var marker = layer ? layer.querySelector('[data-find-input-index="' + match.inputIndex + '"]') : null;
+    if (marker) {
+      el.scrollTop = Math.max(0, marker.offsetTop - Math.floor(el.clientHeight / 2));
+      el.scrollLeft = Math.max(0, marker.offsetLeft - Math.floor(el.clientWidth / 2));
+      syncFindTextControlScroll(el);
+    }
+    if (el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+    if (!options.keepFindFocus && typeof match.start === 'number' && typeof match.end === 'number') {
+      focusTextRange(el, match.start, match.end);
+    }
+    restoreFindFocus(options);
+  }
+
+  function focusTextRange(el, start, end) {
+    if (!el || typeof el.setSelectionRange !== 'function') return;
+    try {
+      el.focus({ preventScroll: true });
+    } catch (e) {
+      el.focus();
+    }
+    el.setSelectionRange(start, end);
+  }
+
+  function restoreFindFocus(options) {
+    if (!options || !options.keepFindFocus) return;
+    var target = options.focusEl || replayFindInput;
+    if (!target) return;
+    try {
+      target.focus({ preventScroll: true });
+    } catch (e) {
+      target.focus();
+    }
+  }
+
+  function cssEscape(value) {
+    return String(value).replace(/"/g, '\\"');
+  }
+
+  function syncReplayHistorySelection() {
+    var validMap = {};
+    var visibleHistory = getVisibleReplayHistory();
+    visibleHistory.forEach(function(item) { validMap[item.id] = true; });
+    Object.keys(selectedReplayHistoryIds).forEach(function(id) {
+      if (!validMap[id]) delete selectedReplayHistoryIds[id];
+    });
+    var selectedCount = Object.keys(selectedReplayHistoryIds).length;
+    if (replayBatchDeleteBtn) replayBatchDeleteBtn.classList.toggle('show', selectedCount > 0);
+    if (replayBatchDeleteBtn) replayBatchDeleteBtn.textContent = selectedCount > 0 ? t('replay.deleteCount', { count: selectedCount }) : t('replay.deleteSelected');
+    if (replayHistoryToggleAll) {
+      replayHistoryToggleAll.checked = visibleHistory.length > 0 && selectedCount === visibleHistory.length;
+      replayHistoryToggleAll.indeterminate = selectedCount > 0 && selectedCount < visibleHistory.length;
+    }
+  }
+
+  function deleteReplayHistoryEntry(id) {
+    replayHistory = replayHistory.filter(function(item) { return item.id !== id; });
+    delete selectedReplayHistoryIds[id];
+    persistReplayHistory();
+    renderReplayHistory();
+    setReplayStatus(tt('保存请求已删除', 'Saved request deleted'), 'success');
+  }
+
+  function resendSelectedRequest() {
+    var req = replayRequestId ? findReq(replayRequestId) : null;
+
+    var method = replayMethod && replayMethod.value ? replayMethod.value.toUpperCase() : 'GET';
+    var url = replayUrl ? replayUrl.value.trim() : '';
+    var headersText = replayHeaders ? replayHeaders.value : '';
+    var headers = parseHeadersText(headersText);
+    var bodyState = captureReplayBodyState({ includeFiles: true });
+
+    if (!url) {
+      setReplayStatus(tt('请输入请求 URL', 'Please enter a request URL'), 'error');
+      if (replayUrl) replayUrl.focus();
+      return;
+    }
+
+    var bodyPayload;
+    try {
+      bodyPayload = buildReplayFetchBody(method, headers, bodyState);
+      headersText = headersToEditorText(headers);
+      if (replayHeaders) replayHeaders.value = headersText;
+    } catch (error) {
+      setReplayStatus(tt('发送失败: {message}', 'Send failed: {message}', { message: error.message }), 'error');
+      showToast(tt('发送失败: {message}', 'Send failed: {message}', { message: error.message }), 'error');
+      return;
+    }
+
+    var fetchOptions = {
+      method: method,
+      headers: headers,
+      cache: 'no-store',
+      credentials: 'same-origin'
+    };
+    if (!fetchOptions.headers['Cache-Control']) fetchOptions.headers['Cache-Control'] = 'no-cache';
+    if (!fetchOptions.headers.Pragma) fetchOptions.headers.Pragma = 'no-cache';
+    if (method !== 'GET' && method !== 'HEAD' && bodyPayload.body) fetchOptions.body = bodyPayload.body;
+
+    sendReplayBtn.disabled = true;
+    setReplayStatus(tt('请求发送中...', 'Sending request...'), '');
+    var startedAt = Date.now();
+
+    fetch(url, fetchOptions).then(function(response) {
+      return response.text().then(function(text) {
+        var nextHeaders = {};
+        response.headers.forEach(function(value, key) {
+          nextHeaders[key.toLowerCase()] = value;
+        });
+        return {
+          ok: response.ok,
+          status: response.status,
+          statusText: response.statusText || '',
+          headers: nextHeaders,
+          body: text
+        };
+      });
+    }).then(function(result) {
+      var durationMs = Date.now() - startedAt;
+      if (!req) {
+        req = {
+          id: 'replay_' + Date.now() + '_' + random(6),
+          url: url,
+          method: method,
+          status: 0,
+          statusText: '',
+          headers: {},
+          resHeaders: {},
+          postData: '',
+          mimeType: '',
+          responseContent: '',
+          responseEncoding: '',
+          responseBodyState: '',
+          responseBodyMessage: '',
+          resourceType: 'fetch',
+          imported: false,
+          ruleId: ''
+        };
+        requests.unshift(req);
+        if (requests.length > 500) requests.length = 500;
+      }
+      req.method = method;
+      req.url = url;
+      req.headers = normalizeHeaderKeys(headers);
+      req.postData = method === 'GET' || method === 'HEAD' ? '' : bodyPayload.preview;
+      req.replayBodyState = serializeReplayBodyState(bodyPayload.state);
+      req.postDataMimeType = bodyPayload.state.type === 'urlencoded' ? 'application/x-www-form-urlencoded;charset=UTF-8' : (bodyPayload.state.type === 'multipart' ? 'multipart/form-data' : '');
+      req.postDataParams = postDataParamsFromReplayBodyState(bodyPayload.state);
+      req.status = result.status;
+      req.statusText = result.statusText;
+      req.resHeaders = result.headers;
+      req.responseContent = result.body;
+      req.responseEncoding = '';
+      req.responseBodyState = req.responseContent ? 'text' : 'empty';
+      req.responseBodyMessage = req.responseContent ? '' : tt('该请求没有可返回的响应体。', 'This request has no response body.');
+      req.mimeType = result.headers['content-type'] || req.mimeType || '';
+      req.resourceType = requestTypeFromValues(url, req.mimeType);
+      req.lastReplayDurationMs = durationMs;
+      req.totalTimeMs = durationMs;
+      req.timeSource = 'replay';
+      replayRequestId = req.id;
+      req.imported = hasImportedRuleForRequest(req);
+      if (!req.imported) req.ruleId = '';
+      syncReplayHistoryResult(method, url, headersText, bodyPayload.state, result.status, result.statusText, durationMs);
+      updateStoredRequestSnapshot(req);
+      renderNetworkList();
+      renderBeaconTab();
+      if (selectedId === req.id) showDetails(req.id);
+      renderReplayResult(req);
+      setText('replaySourceText', method + ' ' + displayPath(url));
+      renderReplayHistory();
+      updateBadge();
+      setReplayStatus(tt('请求已完成，状态码 {status}，耗时 {time} ms', 'Request completed, status {status}, time {time} ms', { status: result.status, time: durationMs }), result.ok ? 'success' : 'error');
+      showToast(result.ok ? tt('请求已重发', 'Request resent') : tt('请求返回错误状态码 {status}', 'Request returned error status {status}', { status: result.status }), result.ok ? undefined : 'error');
+    }).catch(function(error) {
+      setReplayStatus(tt('发送失败: {message}', 'Send failed: {message}', { message: error.message }), 'error');
+      showToast(tt('发送失败: {message}', 'Send failed: {message}', { message: error.message }), 'error');
+    }).finally(function() {
+      sendReplayBtn.disabled = false;
+    });
+  }
+
+  // Import request → create rule
+  function importRequest(req) {
+    if (req.imported) return;
+
+    var body = req.responseContent || '';
+    try { body = JSON.stringify(JSON.parse(body), null, 2); } catch(e) {}
+
+    var headerObj = {};
+    var ct = req.resHeaders['content-type'] || 'application/json';
+    headerObj['Content-Type'] = ct;
+    ['access-control-allow-origin', 'cache-control'].forEach(function(k) {
+      if (req.resHeaders[k]) headerObj[k] = req.resHeaders[k];
+    });
+
+    var name = ruleNameFromUrl(req.url, req.method);
+    var rule = {
+      id: genId(),
+      name: name,
+      enabled: false,
+      method: req.method,
+      url: { pattern: toMockPathPattern(req.url), matchType: 'contains' },
+      bodyMatch: {
+        enabled: false,
+        field: '',
+        value: '',
+        matchType: 'contains'
+      },
+      response: { statusCode: req.status, headers: headerObj, body: body },
+      delay: 0,
+      createdAt: Date.now(),
+      group: activeGroup
+    };
+
+    chrome.runtime.sendMessage({ type: 'SAVE_RULE', rule: rule }, function() {
+      upsertById(rules, rule);
+      groups = uniqueGroups(groups.concat([normalizeGroup(rule.group)]));
+      req.imported = true;
+      req.ruleId = rule.id;
+      updateStoredRequestImport(req);
+      renderRules();
+      renderNetworkList();
+      renderBeaconTab();
+      showDetails(req.id);
+      showToast(tt('✦ 已导入: {name}', '✦ Imported: {name}', { name: name }));
+    });
+  }
+
+  function unimportRequest(req) {
+    if (!req) return;
+    if (!req.ruleId) {
+      var matchedRule = findImportedRuleForRequest(req);
+      if (matchedRule) {
+        req.imported = true;
+        req.ruleId = matchedRule.id;
+      }
+    }
+    if (!req.imported || !req.ruleId) {
+      req.imported = false;
+      updateStoredRequestImport(req);
+      refreshDetailImportState();
+      renderNetworkList();
+      return;
+    }
+    var ruleId = req.ruleId;
+    chrome.runtime.sendMessage({ type: 'DELETE_RULE', ruleId: ruleId }, function() {
+      rules = rules.filter(function(rule) { return rule.id !== ruleId; });
+      selectedRuleIds = Object.assign({}, selectedRuleIds);
+      delete selectedRuleIds[ruleId];
+      req.imported = false;
+      req.ruleId = '';
+      updateStoredRequestImport(req);
+      renderRules();
+      renderNetworkList();
+      renderBeaconTab();
+      if (selectedId === req.id) showDetails(req.id);
+      loadRules();
+      showToast(tt('已取消导入 Mock', 'Mock import removed'));
+    });
+  }
+
+  function updateStoredRequestImport(req) {
+    chrome.storage.local.get('capturedRequests', function(result) {
+      var list = result.capturedRequests || [];
+      var changed = false;
+      list.forEach(function(item) {
+        if (item.id === req.id || (item.url === req.url && item.method === req.method)) {
+          item.imported = !!req.imported;
+          item.ruleId = req.ruleId || '';
+          changed = true;
+        }
+      });
+      if (changed) chrome.storage.local.set({ capturedRequests: list });
+    });
+  }
+
+  function updateStoredRequestSnapshot(req) {
+    chrome.storage.local.get('capturedRequests', function(result) {
+      var list = result.capturedRequests || [];
+      var changed = false;
+      list.forEach(function(item) {
+        if (item.id === req.id) {
+          item.url = req.url;
+          item.method = req.method;
+          item.status = req.status;
+          item.statusText = req.statusText;
+          item.resHeaders = req.resHeaders;
+          item.totalTimeMs = req.totalTimeMs || 0;
+          item.timeSource = req.timeSource || '';
+          item.startedDateTime = req.startedDateTime || '';
+          item.cookies = req.cookies || [];
+          item.setCookies = req.setCookies || [];
+          item.postData = req.postData || '';
+          item.postDataMimeType = req.postDataMimeType || '';
+          item.postDataParams = req.postDataParams || [];
+          item.replayBodyState = req.replayBodyState || null;
+          item.mimeType = req.mimeType;
+          item.responseContent = req.responseContent;
+          item.responseEncoding = req.responseEncoding || '';
+          item.responseBodyState = req.responseBodyState || '';
+          item.responseBodyMessage = req.responseBodyMessage || '';
+          item.imported = !!req.imported;
+          item.ruleId = req.ruleId || '';
+          changed = true;
+        }
+      });
+      if (changed) chrome.storage.local.set({ capturedRequests: list });
+    });
+  }
+
+  function getEntryTotalTimeInfo(entry) {
+    if (entry && typeof entry.time === 'number' && isFinite(entry.time) && entry.time >= 0) {
+      return { value: Math.round(entry.time), source: 'har' };
+    }
+    var timings = entry && entry.timings ? entry.timings : null;
+    if (!timings) return { value: 0, source: '' };
+    var total = 0;
+    ['blocked', 'dns', 'connect', 'send', 'wait', 'receive', 'ssl'].forEach(function(key) {
+      var value = timings[key];
+      if (typeof value === 'number' && isFinite(value) && value > 0) total += value;
+    });
+    return total > 0 ? { value: Math.round(total), source: 'timings' } : { value: 0, source: '' };
+  }
+
+  function normalizeReplayStatus(value) {
+    var status = Number(value) || 0;
+    return status >= 100 ? status : 0;
+  }
+
+  function normalizeReplayDurationMs(value) {
+    var duration = Number(value) || 0;
+    return duration > 0 ? Math.round(duration) : 0;
+  }
+
+  function replayHistoryNameText(item) {
+    var name = String((item && (item.name || item.label)) || '').trim();
+    var requestLine = ((item && item.method) || 'GET') + ' ' + displayPath((item && item.url) || '');
+    return name && name !== requestLine ? name : t('common.unnamed');
+  }
+
+  function truncateReplayHistoryName(name) {
+    var value = String(name || '');
+    return value.length > 15 ? value.slice(0, 15) + '...' : value;
+  }
+
+  function normalizeReplayText(value) {
+    return String(value || '').replace(/\r\n/g, '\n');
+  }
+
+  function isReplayHistorySameRequest(item, method, url, headersText, bodyState) {
+    return !!item &&
+      (item.method || 'GET').toUpperCase() === String(method || 'GET').toUpperCase() &&
+      item.url === url &&
+      replayHeadersSignature(item.headersText) === replayHeadersSignature(headersText) &&
+      replayBodySignature(getReplayHistoryBodyState(item)) === replayBodySignature(bodyState);
+  }
+
+  function getReplaySourceForCurrentForm(method, url, headersText, bodyState) {
+    var req = replayRequestId ? findReq(replayRequestId) : null;
+    if (!req) return null;
+    if ((req.method || 'GET').toUpperCase() !== String(method || 'GET').toUpperCase() || req.url !== url) return null;
+    if (replayHeadersSignature(buildReplayHeadersText(req)) !== replayHeadersSignature(headersText)) return null;
+    var reqBodyState = req.replayBodyState || replayBodyStateFromRequest(req, buildReplayHeadersText(req));
+    if (replayBodySignature(reqBodyState) !== replayBodySignature(bodyState)) return null;
+    return req;
+  }
+
+  function replayHeadersSignature(text) {
+    var headers = normalizeHeaderKeys(parseHeadersText(text || ''));
+    return Object.keys(headers).sort().map(function(key) {
+      return key + ':' + headers[key];
+    }).join('\n');
+  }
+
+  function clearReplaySourceRequest() {
+    var req = replayRequestId ? findReq(replayRequestId) : null;
+    if (req) req.replayImported = false;
+    replayRequestId = null;
+    refreshDetailImportState();
+    renderNetworkList();
+  }
+
+  function syncReplayHistoryResult(method, url, headersText, bodyState, status, statusText, durationMs) {
+    var changed = false;
+    replayHistory.forEach(function(item) {
+      if (!isReplayHistorySameRequest(item, method, url, headersText, bodyState)) return;
+      item.status = normalizeReplayStatus(status);
+      item.statusText = statusText || '';
+      item.totalTimeMs = normalizeReplayDurationMs(durationMs);
+      changed = true;
+    });
+    if (changed) persistReplayHistory();
+  }
+
+  function formatTimeSource(source) {
+    if (source === 'har') return 'HAR';
+    if (source === 'timings') return 'timings';
+    if (source === 'replay') return 'Replay';
+    return '-';
+  }
+
+  function formatTimeSourceHint(source) {
+    if (source === 'har') return tt('HAR: 浏览器 DevTools/HAR 提供的原生总耗时', 'HAR: native total time from browser DevTools/HAR');
+    if (source === 'timings') return tt('timings: 使用请求各阶段耗时相加得到的近似总耗时', 'timings: approximate total time from summed request phases');
+    if (source === 'replay') return tt('Replay: 使用本插件重新发送请求时记录的耗时', 'Replay: duration recorded when this extension resent the request');
+    return tt('耗时来源未知', 'Unknown timing source');
+  }
+
+  function loadCookieEntries() {
+    try {
+      cookieEntries = JSON.parse(localStorage.getItem('apiStudioCookieEntries') || '[]');
+      if (!Array.isArray(cookieEntries)) cookieEntries = [];
+    } catch(e) {
+      cookieEntries = [];
+    }
+  }
+
+  function persistCookieEntries() {
+    try { localStorage.setItem('apiStudioCookieEntries', JSON.stringify(cookieEntries)); } catch(e) {}
+  }
+
+  function renderCookiesTab() {
+    if (!cookiesList) return;
+    if (cookiesCountBadge) cookiesCountBadge.textContent = t('cookies.count', { count: cookieEntries.length });
+    if (cookieEntries.length === 0) {
+      cookiesList.innerHTML = '';
+      if (cookiesEmpty) cookiesList.appendChild(cookiesEmpty);
+      if (cookiesDetailEmpty) cookiesDetailEmpty.style.display = 'flex';
+      if (cookiesDetailContent) cookiesDetailContent.style.display = 'none';
+      return;
+    }
+    if (!selectedCookieEntryId) selectedCookieEntryId = cookieEntries[0].id;
+    cookiesList.innerHTML = cookieEntries.map(function(item, index) {
+      return '<div class="cookies-item' + (item.id === selectedCookieEntryId ? ' active' : '') + '" data-id="' + escAttr(item.id) + '">' +
+        '<div class="cookies-item-title">#' + (index + 1) + ' ' + escHtml(item.method + ' ' + item.path) + '</div>' +
+        '<div class="cookies-item-meta">' + escHtml(item.timeText || '') + '<br>Cookies ' + (item.cookies || []).length + ' · Set-Cookie ' + (item.setCookies || []).length + '</div>' +
+      '</div>';
+    }).join('');
+    showCookieEntry(selectedCookieEntryId);
+  }
+
+  function loadBeaconConfig() {
+    try {
+      var saved = JSON.parse(localStorage.getItem('apiStudioBeaconConfig') || '{}');
+      if (saved && typeof saved === 'object') {
+        beaconConfig.path = String(saved.path || '');
+        beaconConfig.conditions = normalizeBeaconConditions(saved.conditions || buildLegacyBeaconConditions(saved));
+        beaconConfig.enabled = saved.enabled !== false;
+      }
+    } catch (e) {}
+    if (beaconPathInput) beaconPathInput.value = beaconConfig.path;
+    renderBeaconConditionRows();
+    if (beaconEnabled) beaconEnabled.checked = beaconConfig.enabled;
+  }
+
+  function persistBeaconConfig() {
+    try {
+      localStorage.setItem('apiStudioBeaconConfig', JSON.stringify(beaconConfig));
+    } catch (e) {}
+  }
+
+  function buildLegacyBeaconConditions(saved) {
+    if (!saved || (!saved.field && !saved.contains)) return [];
+    return [{ field: saved.field || '', contains: saved.contains || '', mode: 'fuzzy' }];
+  }
+
+  function normalizeBeaconConditions(conditions) {
+    return (conditions || []).map(function(item) {
+      return {
+        field: String((item && item.field) || '').trim(),
+        contains: String((item && item.contains) || '').trim(),
+        mode: (item && item.mode) === 'exact' ? 'exact' : 'fuzzy'
+      };
+    }).filter(function(item) {
+      return item.field || item.contains;
+    });
+  }
+
+  function getBeaconConditions() {
+    return normalizeBeaconConditions(beaconConfig.conditions || []);
+  }
+
+  function renderBeaconConditionRows() {
+    if (!beaconConditions) return;
+    var rows = (beaconConfig.conditions && beaconConfig.conditions.length ? beaconConfig.conditions : [{ field: '', contains: '', mode: 'fuzzy' }]);
+    beaconConditions.innerHTML = rows.map(function(item, index) {
+      var mode = item.mode === 'exact' ? 'exact' : 'fuzzy';
+      return '<div class="beacon-condition-row" data-index="' + index + '">' +
+        '<input class="form-input beacon-input beacon-condition-key" type="text" placeholder="' + escAttr(t('beacon.keyPlaceholder')) + '" value="' + escAttr(item.field || '') + '">' +
+        '<input class="form-input beacon-input beacon-condition-value" type="text" placeholder="' + escAttr(t('beacon.valuePlaceholder')) + '" value="' + escAttr(item.contains || '') + '">' +
+        '<select class="form-select form-select-sm beacon-condition-mode" title="' + escAttr(t('beacon.matchMode')) + '">' +
+          '<option value="fuzzy"' + (mode === 'fuzzy' ? ' selected' : '') + '>' + escHtml(t('beacon.fuzzy')) + '</option>' +
+          '<option value="exact"' + (mode === 'exact' ? ' selected' : '') + '>' + escHtml(t('beacon.exact')) + '</option>' +
+        '</select>' +
+        '<button class="btn btn-sm beacon-condition-remove" data-action="delete-beacon-condition" type="button" title="' + escAttr(t('beacon.deleteCondition')) + '">' + escHtml(t('common.delete')) + '</button>' +
+      '</div>';
+    }).join('');
+    updateBeaconConditionRemoveState();
+    updateBeaconConditionVisibility();
+  }
+
+  function updateBeaconConditionVisibility() {
+    if (beaconConditions) beaconConditions.classList.toggle('collapsed', !beaconConditionsExpanded);
+    if (addBeaconConditionBtn) addBeaconConditionBtn.style.display = beaconConditionsExpanded ? 'inline-flex' : 'none';
+    if (toggleBeaconConditionsBtn) toggleBeaconConditionsBtn.textContent = beaconConditionsExpanded ? t('beacon.collapseConditions') : t('beacon.editConditions');
+    if (beaconConditionSummary) beaconConditionSummary.style.display = beaconConditionsExpanded ? 'none' : 'flex';
+    renderBeaconConditionSummary();
+  }
+
+  function renderBeaconConditionSummary() {
+    if (!beaconConditionSummary) return;
+    var conditions = getBeaconConditions();
+    if (!conditions.length) {
+      beaconConditionSummary.classList.add('empty');
+      beaconConditionSummary.textContent = t('beacon.noConditions');
+      return;
+    }
+    beaconConditionSummary.classList.remove('empty');
+    beaconConditionSummary.innerHTML = conditions.map(function(item) {
+      var op = item.mode === 'exact' ? '=' : '≈';
+      var text = (item.field || t('beacon.fullText')) + (item.contains ? op + item.contains : '');
+      return '<span class="beacon-condition-chip" title="' + escAttr(text) + '">' + escHtml(text) + '</span>';
+    }).join('');
+  }
+
+  function syncBeaconConditionsFromDom() {
+    if (!beaconConditions) return;
+    beaconConfig.conditions = Array.prototype.slice.call(beaconConditions.querySelectorAll('.beacon-condition-row')).map(function(row) {
+      return {
+        field: ((row.querySelector('.beacon-condition-key') || {}).value || '').trim(),
+        contains: ((row.querySelector('.beacon-condition-value') || {}).value || '').trim(),
+        mode: ((row.querySelector('.beacon-condition-mode') || {}).value || 'fuzzy') === 'exact' ? 'exact' : 'fuzzy'
+      };
+    });
+  }
+
+  function ensureBeaconConditionRows() {
+    if (!beaconConditions || beaconConditions.querySelector('.beacon-condition-row')) {
+      updateBeaconConditionRemoveState();
+      return;
+    }
+    beaconConfig.conditions = [{ field: '', contains: '', mode: 'fuzzy' }];
+    renderBeaconConditionRows();
+  }
+
+  function updateBeaconConditionRemoveState() {
+    if (!beaconConditions) return;
+    var rows = beaconConditions.querySelectorAll('.beacon-condition-row');
+    rows.forEach(function(row) {
+      var btn = row.querySelector('.beacon-condition-remove');
+      if (btn) btn.style.visibility = rows.length <= 1 ? 'hidden' : 'visible';
+    });
+  }
+
+  function renderBeaconTab() {
+    if (!beaconList || !beaconCountBadge) return;
+    var matches = getBeaconMatches();
+    beaconCountBadge.textContent = matches.length > 0 ? String(matches.length) : '';
+    beaconCountBadge.classList.toggle('show', matches.length > 0);
+    beaconCountBadge.title = t('beacon.hitTitle', { count: matches.length });
+    if (matches.length === 0) {
+      beaconList.innerHTML = '';
+      if (beaconEmpty) beaconList.appendChild(beaconEmpty);
+      if (beaconDetailEmpty) beaconDetailEmpty.style.display = 'flex';
+      if (beaconDetailContent) beaconDetailContent.style.display = 'none';
+      return;
+    }
+    if (!selectedBeaconId || !matches.some(function(item) { return item.id === selectedBeaconId; })) {
+      selectedBeaconId = matches[0].id;
+    }
+    beaconList.innerHTML = matches.map(function(item, index) {
+      var req = item.req;
+      var fieldBadge = item.fieldValues.length
+        ? '<span class="beacon-match-badge">' + escHtml(t('beacon.fieldValueCount', { count: item.fieldValues.length })) + '</span>'
+        : '';
+      return '<div class="beacon-match-item' + (item.id === selectedBeaconId ? ' active' : '') + '" data-beacon-id="' + escAttr(item.id) + '">' +
+        '<div class="beacon-match-top">' +
+          '<span class="beacon-match-method method ' + escAttr((req.method || 'GET').toUpperCase()) + '">' + escHtml(req.method || 'GET') + '</span>' +
+          fieldBadge +
+        '</div>' +
+        '<div class="beacon-match-meta">#' + (index + 1) + ' · ' + escHtml(formatDateTime(new Date(req.startedDateTime || Date.now()))) + '</div>' +
+        '<div class="beacon-match-path" title="' + escAttr(req.url || '') + '">' + escHtml(displayPath(req.url || '')) + '</div>' +
+        '<div class="beacon-match-bottom">' +
+          '<div class="beacon-match-meta">' + escHtml(item.summary) + '</div>' +
+          '<button class="beacon-match-delete" data-action="delete-beacon-match" type="button" title="' + escAttr(t('beacon.deleteHit')) + '">' + escHtml(t('common.delete')) + '</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+    showBeaconDetail(selectedBeaconId, matches);
+  }
+
+  function showBeaconDetail(id, matches) {
+    var match = (matches || getBeaconMatches()).find(function(item) { return item.id === id; });
+    if (!match) {
+      if (beaconDetailEmpty) beaconDetailEmpty.style.display = 'flex';
+      if (beaconDetailContent) beaconDetailContent.style.display = 'none';
+      return;
+    }
+    if (beaconDetailEmpty) beaconDetailEmpty.style.display = 'none';
+    if (beaconDetailContent) beaconDetailContent.style.display = 'block';
+    setText('beaconDetailPath', displayPath(match.req.url || ''));
+    setText('beaconDetailMethod', match.req.method || 'GET');
+    setText('beaconDetailTime', formatDateTime(new Date(match.req.startedDateTime || Date.now())));
+    var conditions = getBeaconConditions();
+    var fieldText = conditions.length
+      ? t('beacon.conditionsHit', { hit: match.matchedConditions.length, total: conditions.length })
+      : t('beacon.noWatchField');
+    setText('beaconDetailField', fieldText);
+    var fieldEl = $('beaconDetailField');
+    if (fieldEl) fieldEl.className = 'value ' + (conditions.length && match.matchedConditions.length === conditions.length ? 'beacon-field-hit' : 'beacon-field-miss');
+    setText('beaconDetailFieldValues', match.fieldValues.length ? match.fieldValues.map(function(item) { return item.path + ': ' + item.value; }).join('\n') : t('common.empty'));
+    setBeaconPayloadHtml(match);
+  }
+
+  function setBeaconPayloadHtml(match) {
+    var el = $('beaconDetailPayload');
+    if (!el) return;
+    if (!match || !match.payloadText) {
+      el.textContent = t('common.empty');
+      return;
+    }
+    el.innerHTML = buildHighlightedBeaconPayloadHtml(match.parsed && match.parsed.merged, getBeaconConditions());
+  }
+
+  function getBeaconMatches() {
+    if (!beaconConfig.enabled || !beaconConfig.path) return [];
+    var conditions = getBeaconConditions();
+    return requests.filter(function(req) {
+      return isBeaconMatch(req);
+    }).map(function(req) {
+      var parsed = parseBeaconPayload(req);
+      var conditionResult = matchBeaconConditions(parsed.merged, conditions);
+      if (!conditionResult.matched) return null;
+      return {
+        id: req.id,
+        req: req,
+        parsed: parsed,
+        fieldValues: conditionResult.fieldValues,
+        matchedConditions: conditionResult.matchedConditions,
+        payloadText: stringifyBeaconPayload(parsed.merged),
+        summary: buildBeaconSummary(parsed, conditionResult.fieldValues, conditions)
+      };
+    }).filter(Boolean);
+  }
+
+  function findBeaconMatch(id) {
+    return getBeaconMatches().find(function(item) { return item.id === id; }) || null;
+  }
+
+  function deleteBeaconMatch(id) {
+    if (!id) return;
+    requests = requests.filter(function(req) { return req.id !== id; });
+    delete highlightedRequestIds[id];
+    syncLatestRequestFromList();
+    if (selectedBeaconId === id) selectedBeaconId = '';
+    if (selectedId === id) {
+      selectedId = null;
+      if (detailEmpty) detailEmpty.style.display = 'flex';
+      if (detailContent) detailContent.style.display = 'none';
+    }
+    chrome.storage.local.get('capturedRequests', function(result) {
+      var list = (result.capturedRequests || []).filter(function(req) { return req.id !== id; });
+      chrome.storage.local.set({ capturedRequests: list });
+    });
+    renderNetworkList();
+    renderBeaconTab();
+    updateBadge();
+    showToast(tt('命中记录已删除', 'Hit entry deleted'));
+  }
+
+  function isBeaconMatch(req) {
+    if (!req || !req.url) return false;
+    var pathKey = beaconConfig.path.toLowerCase();
+    var target = (displayPath(req.url) + '\n' + req.url).toLowerCase();
+    if (target.indexOf(pathKey) === -1) return false;
+    var conditions = getBeaconConditions();
+    if (!conditions.length) return true;
+    var parsed = parseBeaconPayload(req);
+    return matchBeaconConditions(parsed.merged, conditions).matched;
+  }
+
+  function parseBeaconPayload(req) {
+    var query = {};
+    try {
+      var u = new URL(req.url || '');
+      u.searchParams.forEach(function(value, key) {
+        if (query[key] === undefined) query[key] = value;
+        else if (Array.isArray(query[key])) query[key].push(value);
+        else query[key] = [query[key], value];
+      });
+    } catch (e) {}
+    var bodyRaw = req.postData || '';
+    var bodyParsed = parseBeaconBody(bodyRaw, req.headers || {});
+    return {
+      query: query,
+      body: bodyParsed,
+      merged: {
+        query: query,
+        body: bodyParsed
+      }
+    };
+  }
+
+  function parseBeaconBody(bodyRaw, headers) {
+    if (!bodyRaw) return {};
+    var contentType = String((headers || {})['content-type'] || '').toLowerCase();
+    if (contentType.indexOf('json') !== -1) {
+      try { return JSON.parse(bodyRaw); } catch (e) {}
+    }
+    if (contentType.indexOf('x-www-form-urlencoded') !== -1) {
+      var form = {};
+      String(bodyRaw).split('&').forEach(function(pair) {
+        if (!pair) return;
+        var idx = pair.indexOf('=');
+        var key = decodeURIComponent(idx >= 0 ? pair.slice(0, idx) : pair);
+        var value = decodeURIComponent(idx >= 0 ? pair.slice(idx + 1) : '');
+        if (form[key] === undefined) form[key] = value;
+        else if (Array.isArray(form[key])) form[key].push(value);
+        else form[key] = [form[key], value];
+      });
+      return form;
+    }
+    try { return JSON.parse(bodyRaw); } catch (e2) {}
+    return { raw: bodyRaw };
+  }
+
+  function matchBeaconConditions(source, conditions) {
+    var result = { matched: true, fieldValues: [], matchedConditions: [] };
+    if (!conditions.length) return result;
+    conditions.forEach(function(condition) {
+      var values = collectBeaconFieldValues(source, condition.field);
+      if (condition.contains) {
+        values = values.filter(function(item) {
+          return beaconValueMatches(item.rawValue, condition.contains, condition.mode);
+        });
+      }
+      if (values.length === 0) {
+        result.matched = false;
+        return;
+      }
+      result.matchedConditions.push(condition);
+      result.fieldValues = result.fieldValues.concat(values);
+    });
+    return result;
+  }
+
+  function buildHighlightedBeaconPayloadHtml(payload, conditions) {
+    var highlightRules = (conditions || []).map(function(condition) {
+      return {
+        fieldLower: String(condition.field || '').trim().toLowerCase(),
+        containsText: String(condition.contains || '').trim(),
+        mode: condition.mode === 'exact' ? 'exact' : 'fuzzy'
+      };
+    }).filter(function(rule) { return !!rule.fieldLower || !!rule.containsText; });
+    var lines = [];
+    renderBeaconJsonValue(payload, '', 0, lines, highlightRules);
+    return lines.join('\n') || t('common.empty');
+  }
+
+  function renderBeaconJsonValue(value, path, depth, lines, highlightRules) {
+    var indent = repeatSpaces(depth * 2);
+    if (Array.isArray(value)) {
+      lines.push(indent + '[');
+      value.forEach(function(item, index) {
+        var before = lines.length;
+        renderBeaconJsonValue(item, path + '[' + index + ']', depth + 1, lines, highlightRules);
+        appendCommaToLastLine(lines, before, index < value.length - 1);
+      });
+      lines.push(indent + ']');
+      return;
+    }
+    if (value && typeof value === 'object') {
+      var keys = Object.keys(value);
+      lines.push(indent + '{');
+      keys.forEach(function(key, index) {
+        var nextPath = path ? path + '.' + key : key;
+        var item = value[key];
+        var hitRule = getBeaconHighlightRule(key, item, nextPath, highlightRules);
+        var keyHtml = escHtml(JSON.stringify(key));
+        if (hitRule) keyHtml = '<span class="beacon-json-hit-key">' + keyHtml + '</span>';
+        if (item && typeof item === 'object') {
+          lines.push(repeatSpaces((depth + 1) * 2) + keyHtml + ': ' + (Array.isArray(item) ? '[' : '{'));
+          renderBeaconJsonChildren(item, nextPath, depth + 2, lines, highlightRules);
+          lines.push(repeatSpaces((depth + 1) * 2) + (Array.isArray(item) ? ']' : '}') + (index < keys.length - 1 ? ',' : ''));
+        } else {
+          lines.push(repeatSpaces((depth + 1) * 2) + keyHtml + ': ' + formatBeaconJsonPrimitive(item, key, nextPath, highlightRules) + (index < keys.length - 1 ? ',' : ''));
+        }
+      });
+      lines.push(indent + '}');
+      return;
+    }
+    lines.push(indent + formatBeaconJsonPrimitive(value, '', path, highlightRules));
+  }
+
+  function renderBeaconJsonChildren(value, path, depth, lines, highlightRules) {
+    var entries = Array.isArray(value) ? value : Object.keys(value);
+    entries.forEach(function(entry, index) {
+      if (Array.isArray(value)) {
+        var before = lines.length;
+        renderBeaconJsonValue(entry, path + '[' + index + ']', depth, lines, highlightRules);
+        appendCommaToLastLine(lines, before, index < entries.length - 1);
+        return;
+      }
+      var key = entry;
+      var nextPath = path ? path + '.' + key : key;
+      var item = value[key];
+      var hitRule = getBeaconHighlightRule(key, item, nextPath, highlightRules);
+      var keyHtml = escHtml(JSON.stringify(key));
+      if (hitRule) keyHtml = '<span class="beacon-json-hit-key">' + keyHtml + '</span>';
+      if (item && typeof item === 'object') {
+        lines.push(repeatSpaces(depth * 2) + keyHtml + ': ' + (Array.isArray(item) ? '[' : '{'));
+        renderBeaconJsonChildren(item, nextPath, depth + 1, lines, highlightRules);
+        lines.push(repeatSpaces(depth * 2) + (Array.isArray(item) ? ']' : '}') + (index < entries.length - 1 ? ',' : ''));
+      } else {
+        lines.push(repeatSpaces(depth * 2) + keyHtml + ': ' + formatBeaconJsonPrimitive(item, key, nextPath, highlightRules) + (index < entries.length - 1 ? ',' : ''));
+      }
+    });
+  }
+
+  function appendCommaToLastLine(lines, beforeIndex, shouldAppend) {
+    if (!shouldAppend || lines.length <= beforeIndex) return;
+    lines[lines.length - 1] += ',';
+  }
+
+  function formatBeaconJsonPrimitive(value, key, path, highlightRules) {
+    var text = JSON.stringify(value);
+    if (text === undefined) text = String(value);
+    var shouldHighlight = !!getBeaconHighlightRule(key, value, path, highlightRules);
+    var html = escHtml(text);
+    return shouldHighlight ? '<span class="beacon-json-hit-value">' + html + '</span>' : html;
+  }
+
+  function getBeaconHighlightRule(key, value, path, highlightRules) {
+    var keyLower = String(key || '').toLowerCase();
+    return (highlightRules || []).find(function(rule) {
+      var containsText = rule.containsText || '';
+      if (!rule.fieldLower) {
+        return containsText && (beaconValueMatches(key, containsText, rule.mode) || beaconValueMatches(value, containsText, rule.mode));
+      }
+      if (keyLower === rule.fieldLower) {
+        return !containsText || beaconValueMatches(value, containsText, rule.mode);
+      }
+      if (!isBeaconPathInsideField(path, rule.fieldLower)) return false;
+      return containsText && (beaconValueMatches(key, containsText, rule.mode) || beaconValueMatches(value, containsText, rule.mode));
+    }) || null;
+  }
+
+  function isBeaconPathInsideField(path, fieldLower) {
+    if (!path || !fieldLower) return false;
+    return String(path).toLowerCase().split('.').some(function(part) {
+      return part.replace(/\[\d+\]/g, '') === fieldLower;
+    });
+  }
+
+  function repeatSpaces(count) {
+    return new Array(count + 1).join(' ');
+  }
+
+  function collectBeaconFieldValues(source, fieldName) {
+    var hits = [];
+    if (!fieldName) {
+      return [{ path: 'payload', value: formatBeaconFieldValue(source), rawValue: source }];
+    }
+    walkBeaconObject(source, '', String(fieldName).toLowerCase(), hits);
+    return hits;
+  }
+
+  function walkBeaconObject(value, path, fieldLower, hits) {
+    if (Array.isArray(value)) {
+      value.forEach(function(item, index) {
+        walkBeaconObject(item, path + '[' + index + ']', fieldLower, hits);
+      });
+      return;
+    }
+    if (!value || typeof value !== 'object') return;
+    Object.keys(value).forEach(function(key) {
+      var nextPath = path ? path + '.' + key : key;
+      if (String(key).toLowerCase() === fieldLower) {
+        hits.push({
+          path: nextPath,
+          value: formatBeaconFieldValue(value[key]),
+          rawValue: value[key]
+        });
+      }
+      walkBeaconObject(value[key], nextPath, fieldLower, hits);
+    });
+  }
+
+  function formatBeaconFieldValue(value) {
+    if (value && typeof value === 'object') {
+      try { return JSON.stringify(value); } catch (e) { return String(value); }
+    }
+    return String(value);
+  }
+
+  function beaconValueMatches(value, expectedText, mode) {
+    expectedText = String(expectedText || '').trim();
+    if (!expectedText) return true;
+
+    var matchValue = parseBeaconActualJson(value);
+    var parsedExpected = parseBeaconExpectedJson(expectedText);
+    if (mode === 'exact') return beaconValueExactMatches(matchValue, parsedExpected, expectedText);
+    if (parsedExpected.ok && partialBeaconJsonMatch(matchValue, parsedExpected.value)) return true;
+
+    var searchText = buildBeaconSearchText(matchValue);
+    if (matchValue !== value) searchText += '\n' + buildBeaconSearchText(value);
+    searchText = searchText.toLowerCase();
+    var expectedLower = expectedText.toLowerCase();
+    if (searchText.indexOf(expectedLower) !== -1) return true;
+
+    var compactSearch = normalizeBeaconSearchText(searchText);
+    var compactExpected = normalizeBeaconSearchText(expectedLower);
+    if (compactExpected && compactSearch.indexOf(compactExpected) !== -1) return true;
+
+    var tokens = expectedLower.split(/[\s,;:=]+/).map(function(item) {
+      return item.trim();
+    }).filter(Boolean);
+    return tokens.length > 1 && tokens.every(function(token) {
+      return searchText.indexOf(token) !== -1 || compactSearch.indexOf(normalizeBeaconSearchText(token)) !== -1;
+    });
+  }
+
+  function beaconValueExactMatches(value, parsedExpected, expectedText) {
+    if (parsedExpected.ok) return partialBeaconJsonMatch(value, parsedExpected.value, true);
+    if (value && typeof value === 'object') return beaconExactTextInObject(value, expectedText);
+    return normalizeBeaconExactText(value) === normalizeBeaconExactText(expectedText);
+  }
+
+  function beaconExactTextInObject(value, expectedText) {
+    var expected = normalizeBeaconExactText(expectedText);
+    if (!expected) return true;
+    var matched = false;
+    walkBeaconExactValue(value, function(key, item) {
+      if (matched) return;
+      if (normalizeBeaconExactText(key) === expected) {
+        matched = true;
+        return;
+      }
+      if (!item || typeof item !== 'object') matched = normalizeBeaconExactText(item) === expected;
+    });
+    return matched;
+  }
+
+  function walkBeaconExactValue(value, visitor) {
+    if (Array.isArray(value)) {
+      value.forEach(function(item, index) {
+        visitor(String(index), item);
+        walkBeaconExactValue(item, visitor);
+      });
+      return;
+    }
+    if (!value || typeof value !== 'object') return;
+    Object.keys(value).forEach(function(key) {
+      visitor(key, value[key]);
+      walkBeaconExactValue(value[key], visitor);
+    });
+  }
+
+  function parseBeaconExpectedJson(text) {
+    try {
+      return { ok: true, value: JSON.parse(text) };
+    } catch (e) {
+      return { ok: false, value: null };
+    }
+  }
+
+  function parseBeaconActualJson(value) {
+    if (typeof value !== 'string') return value;
+    var text = value.trim();
+    if (!text) return value;
+    var parsed = parseBeaconExpectedJson(text);
+    return parsed.ok ? parsed.value : value;
+  }
+
+  function partialBeaconJsonMatch(actual, expected, exactPrimitive) {
+    if (Array.isArray(expected)) {
+      if (Array.isArray(actual)) {
+        return expected.every(function(expectedItem) {
+          return actual.some(function(actualItem) { return partialBeaconJsonMatch(actualItem, expectedItem, exactPrimitive); });
+        });
+      }
+      if (actual && typeof actual === 'object') return Object.keys(actual).some(function(key) { return partialBeaconJsonMatch(actual[key], expected, exactPrimitive); });
+      return false;
+    }
+
+    if (expected && typeof expected === 'object') {
+      if (Array.isArray(actual)) return actual.some(function(item) { return partialBeaconJsonMatch(item, expected, exactPrimitive); });
+      if (!actual || typeof actual !== 'object') return false;
+      if (isBeaconObjectSubset(actual, expected, exactPrimitive)) return true;
+      return Object.keys(actual).some(function(key) { return partialBeaconJsonMatch(actual[key], expected, exactPrimitive); });
+    }
+
+    return exactPrimitive ? normalizeBeaconExactText(actual) === normalizeBeaconExactText(expected) : beaconPrimitiveMatches(actual, expected);
+  }
+
+  function isBeaconObjectSubset(actual, expected, exactPrimitive) {
+    return Object.keys(expected).every(function(expectedKey) {
+      var actualKey = findBeaconObjectKey(actual, expectedKey);
+      return actualKey !== null && partialBeaconJsonMatch(actual[actualKey], expected[expectedKey], exactPrimitive);
+    });
+  }
+
+  function findBeaconObjectKey(obj, key) {
+    if (!obj || typeof obj !== 'object') return null;
+    if (Object.prototype.hasOwnProperty.call(obj, key)) return key;
+    var lower = String(key).toLowerCase();
+    var keys = Object.keys(obj);
+    for (var i = 0; i < keys.length; i++) {
+      if (String(keys[i]).toLowerCase() === lower) return keys[i];
+    }
+    return null;
+  }
+
+  function beaconPrimitiveMatches(actual, expected) {
+    var actualText = buildBeaconSearchText(actual).toLowerCase();
+    var expectedText = String(expected == null ? '' : expected).toLowerCase();
+    if (!expectedText) return true;
+    return actualText.indexOf(expectedText) !== -1 || normalizeBeaconSearchText(actualText).indexOf(normalizeBeaconSearchText(expectedText)) !== -1;
+  }
+
+  function buildBeaconSearchText(value) {
+    var lines = [];
+    try { lines.push(JSON.stringify(value)); } catch (e) { lines.push(String(value)); }
+    appendBeaconSearchLines(value, '', lines);
+    return lines.filter(Boolean).join('\n');
+  }
+
+  function appendBeaconSearchLines(value, path, lines) {
+    if (Array.isArray(value)) {
+      value.forEach(function(item, index) {
+        appendBeaconSearchLines(item, path + '[' + index + ']', lines);
+      });
+      return;
+    }
+    if (value && typeof value === 'object') {
+      Object.keys(value).forEach(function(key) {
+        var nextPath = path ? path + '.' + key : key;
+        lines.push(nextPath);
+        appendBeaconSearchLines(value[key], nextPath, lines);
+      });
+      return;
+    }
+    if (path) lines.push(path + '=' + String(value));
+    lines.push(String(value));
+  }
+
+  function normalizeBeaconSearchText(text) {
+    return String(text || '').toLowerCase().replace(/[\s"'`{}\[\](),;:=]+/g, '').replace(/\\/g, '');
+  }
+
+  function normalizeBeaconExactText(value) {
+    return String(value == null ? '' : value).trim().toLowerCase();
+  }
+
+  function stringifyBeaconPayload(payload) {
+    try { return JSON.stringify(payload, null, 2); } catch (e) { return String(payload || ''); }
+  }
+
+  function buildBeaconSummary(parsed, fieldValues, conditions) {
+    var parts = [];
+    var queryKeys = Object.keys(parsed.query || {});
+    var bodyKeys = parsed.body && typeof parsed.body === 'object' ? Object.keys(parsed.body) : [];
+    if (queryKeys.length) parts.push(t('beacon.summaryQuery', { count: queryKeys.length }));
+    if (bodyKeys.length) parts.push(t('beacon.summaryBody', { count: bodyKeys.length }));
+    if ((conditions || []).length) {
+      parts.push(fieldValues.length ? t('beacon.summaryConditionHit', { count: fieldValues.length }) : t('beacon.summaryConditionMiss'));
+    }
+    return parts.join(' · ') || t('beacon.summaryEmpty');
+  }
+
+  function showCookieEntry(id) {
+    var entry = cookieEntries.find(function(item) { return item.id === id; });
+    if (!entry) return;
+    selectedCookieEntryId = id;
+    if (cookiesDetailEmpty) cookiesDetailEmpty.style.display = 'none';
+    if (cookiesDetailContent) cookiesDetailContent.style.display = 'block';
+    setText('cookiesDetailPath', entry.path || '');
+    setText('cookiesDetailMethod', entry.method || 'GET');
+    setText('cookiesDetailTime', entry.timeText || '-');
+    setText('cookiesDetailReq', formatCookieLines(entry.cookies));
+    setText('cookiesDetailSet', formatSetCookieLines(entry.setCookies));
+    if (cookiesList) {
+      cookiesList.querySelectorAll('.cookies-item').forEach(function(node) {
+        node.classList.toggle('active', node.dataset.id === id);
+      });
+    }
+  }
+
+  function upsertById(list, item) {
+    var idx = list.findIndex(function(entry) { return entry.id === item.id; });
+    if (idx >= 0) list[idx] = item;
+    else list.unshift(item);
+  }
+
+  // ======================================================================
+  // HELPERS
+  // ======================================================================
+
+  function genId() {
+    return 'rule_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8);
+  }
+
+  function toMockPathPattern(value) {
+    var raw = String(value || '').trim();
+    if (!/^https?:\/\//i.test(raw)) return raw;
+    try {
+      var u = new URL(raw);
+      return (u.pathname || '/') + (u.search || '');
+    } catch (e) {
+      return raw;
+    }
+  }
+
+  function random(n) {
+    return Math.random().toString(36).substr(2, n);
+  }
+
+  function truncateMiddle(text, maxLen) {
+    var value = String(text || '');
+    if (value.length <= maxLen) return value;
+    var keep = Math.max(8, Math.floor((maxLen - 3) / 2));
+    return value.slice(0, keep) + '...' + value.slice(value.length - keep);
+  }
+
+  function findReq(id) {
+    for (var i = 0; i < requests.length; i++) {
+      if (requests[i].id === id) return requests[i];
+    }
+    return null;
+  }
+
+  function getCurrentDetailRequest() {
+    var selected = selectedId ? findReq(selectedId) : null;
+    if (selected) return selected;
+    var detailUrl = (($('detailUrlFull') || {}).textContent || '').trim();
+    var detailMethod = (($('detailMethod') || {}).textContent || 'GET').trim();
+    var req = requests.find(function(item) {
+      return item && item.url === detailUrl && (item.method || 'GET') === detailMethod;
+    }) || null;
+    if (req) selectedId = req.id;
+    return req;
+  }
+
+  function objHeaders(arr) {
+    var obj = {};
+    arr.forEach(function(h) {
+      if (!h || !h.name) return;
+      obj[h.name.toLowerCase()] = h.value;
+    });
+    return obj;
+  }
+
+  function ruleNameFromUrl(url, method) {
+    try {
+      var u = new URL(url);
+      var parts = u.pathname.split('/').filter(Boolean);
+      var last = parts[parts.length - 1] || 'api';
+      return method + ' ' + last + ' — ' + parts.slice(-2).join('/');
+    } catch(e) { return method + ' ' + url.substring(0, 40); }
+  }
+
+  function shortenUrl(url) {
+    try {
+      var u = new URL(url);
+      var path = u.pathname;
+      if (u.search) {
+        var q = u.search.slice(0, 25);
+        if (u.search.length > 25) q += '…';
+        path += q;
+      }
+      return path;
+    } catch(e) { return url.length > 55 ? url.substring(0, 55) + '…' : url; }
+  }
+
+  function displayPath(url) {
+    if (!url) return '';
+    try {
+      var u = new URL(url);
+      return u.pathname + u.search;
+    } catch(e) {
+      return url;
+    }
+  }
+
+  function displayPathOnly(url) {
+    if (!url) return '';
+    try {
+      var u = new URL(url);
+      return u.pathname || '/';
+    } catch(e) {
+      return String(url || '').split('?')[0];
+    }
+  }
+
+  function filteredRequests() {
+    var q = networkSearchText.trim().toLowerCase();
+    return requests.filter(function(req) {
+      if (networkFilterType !== 'all' && req.resourceType !== networkFilterType) return false;
+      if (!q) return true;
+      return displayPath(req.url).toLowerCase().indexOf(q) !== -1 || req.url.toLowerCase().indexOf(q) !== -1;
+    });
+  }
+
+  function requestType(entry) {
+    var resourceType = entry && entry._resourceType ? String(entry._resourceType).toLowerCase() : '';
+    var mimeType = entry && entry.response && entry.response.content ? String(entry.response.content.mimeType || '').toLowerCase() : '';
+    var url = entry && entry.request ? String(entry.request.url || '').toLowerCase() : '';
+    if (resourceType === 'xhr' || resourceType === 'fetch') return 'fetch';
+    if (resourceType === 'script' || /\.m?js($|\?)/.test(url) || mimeType.indexOf('javascript') !== -1) return 'js';
+    if (resourceType === 'stylesheet' || /\.css($|\?)/.test(url) || mimeType.indexOf('css') !== -1) return 'css';
+    if (resourceType === 'image' || mimeType.indexOf('image/') === 0) return 'image';
+    if (resourceType === 'font' || mimeType.indexOf('font') !== -1 || /\.(woff2?|ttf|otf|eot)($|\?)/.test(url)) return 'font';
+    if (resourceType === 'document' || mimeType.indexOf('text/html') !== -1) return 'document';
+    return 'other';
+  }
+
+  function requestTypeFromValues(url, mimeType) {
+    var lowerUrl = String(url || '').toLowerCase();
+    var lowerMime = String(mimeType || '').toLowerCase();
+    if (lowerMime.indexOf('javascript') !== -1 || /\.m?js($|\?)/.test(lowerUrl)) return 'js';
+    if (lowerMime.indexOf('css') !== -1 || /\.css($|\?)/.test(lowerUrl)) return 'css';
+    if (lowerMime.indexOf('image/') === 0) return 'image';
+    if (lowerMime.indexOf('font') !== -1 || /\.(woff2?|ttf|otf|eot)($|\?)/.test(lowerUrl)) return 'font';
+    if (lowerMime.indexOf('text/html') !== -1) return 'document';
+    return 'fetch';
+  }
+
+  function normalizeHeaderKeys(headers) {
+    var normalized = {};
+    Object.keys(headers || {}).forEach(function(key) {
+      normalized[key.toLowerCase()] = headers[key];
+    });
+    return normalized;
+  }
+
+  function truncateUrl(url) {
+    if (!url) return t('common.notSet');
+    try {
+      var u = new URL(url);
+      return u.pathname + u.search;
+    } catch(e) { return url.length > 40 ? url.substring(0, 40) + '…' : url; }
+  }
+
+  // ====== Find Overlay ======
+  var _findMatches = [];
+  var _findIdx = -1;
+
+  function doFind(text) {
+    clearAllHL();
+    _findMatches = [];
+    _findIdx = -1;
+    var ctx = document.getElementById("findOverlayCount");
+    if (!text) { if (ctx) ctx.textContent = "0/0"; return; }
+    var t = text.toLowerCase();
+    var esc = text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    var re = new RegExp("(" + esc + ")", "gi");
+    /* Detail elements - highlight with span tag */
+    ["detailUrl","detailMethod","detailStatus","detailContentType","detailReqHeaders","detailResHeaders","detailResBody"].forEach(function(id) {
+      var el = document.getElementById(id);
+      if (!el || !el.textContent || el.textContent.toLowerCase().indexOf(t) === -1) return;
+      if (id === 'detailResBody' && el.classList.contains('is-media')) return;
+      var txt = el.textContent;
+      el.innerHTML = txt.replace(re, '<span class="find-match">$1</span>');
+      var offset = 0;
+      while (true) {
+        var idx = txt.toLowerCase().indexOf(t, offset);
+        if (idx === -1) break;
+        _findMatches.push({ el: el, match: txt.substring(idx, idx + text.length), offset: idx });
+        offset = idx + 1;
+      }
+      /* Store span references for precise scrolling */
+      var spans = el.querySelectorAll('.find-match');
+      for (var si = 0; si < spans.length; si++) {
+        var eIdx = _findMatches.length - spans.length + si;
+        if (_findMatches[eIdx]) _findMatches[eIdx].span = spans[si];
+      }
+    });
+    highlightDetailRequestBody(text, re, t);
+    /* Table rows - innerHTML highlighting on each cell */
+    document.querySelectorAll("#requestBody tr").forEach(function(r) {
+      if (r.textContent.toLowerCase().indexOf(t) === -1) return;
+      var hasMatch = false;
+      r.querySelectorAll("td").forEach(function(td) {
+        if (td.textContent.toLowerCase().indexOf(t) === -1) return;
+        try {
+          var beforeCount = _findMatches.length;
+          var html = td.innerHTML;
+          var reTD = new RegExp("(" + esc + ")", "gi");
+          td.innerHTML = html.replace(reTD, '<span class="find-match">$1</span>');
+          td.querySelectorAll('.find-match').forEach(function(span) {
+            _findMatches.push({ el: r, span: span, match: span.textContent, offset: beforeCount, isRow: true });
+          });
+          hasMatch = true;
+        } catch(e){}
+      });
+      if (hasMatch) r.classList.add("find-row");
+    });
+    _findIdx = _findMatches.length > 0 ? 0 : -1;
+    updateFindUI();
+    if (_findIdx >= 0) scrollToMatch(_findIdx);
+  }
+
+  function clearAllHL() {
+    ["detailUrl","detailMethod","detailStatus","detailContentType","detailReqHeaders","detailResHeaders","detailResBody"].forEach(function(id) {
+      var el = document.getElementById(id);
+      if (id === 'detailResBody' && el && el.classList.contains('is-media')) return;
+      if (el && el.innerHTML !== el.textContent) el.innerHTML = el.textContent;
+    });
+    clearDetailRequestBodyFindHighlights();
+    document.querySelectorAll('#requestBody td .find-match').forEach(function(s) {
+      var tx = document.createTextNode(s.textContent); s.parentNode.replaceChild(tx, s);
+    });
+    document.querySelectorAll('#requestBody tr.find-row').forEach(function(r) { r.classList.remove('find-row'); });
+  }
+
+  function scrollToMatch(idx) {
+    if (!_findMatches || idx < 0 || idx >= _findMatches.length) return;
+    var m = _findMatches[idx];
+    if (m.el && m.el.scrollIntoView) {
+      if (m.isRow) {
+        m.el.scrollIntoView({ behavior: "smooth", block: "center" });
+      } else if (m.span) {
+        /* Scroll both the outer container AND the inner span (for scrollable <pre> blocks) */
+        m.el.scrollIntoView({ behavior: "smooth", block: "center" });
+        try { m.span.scrollIntoView({ behavior: "smooth", block: "center" }); } catch(e){}
+      } else {
+        m.el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }
+    updateFindUI();
+  }
+
+  function updateFindUI() {
+    var total = _findMatches.length;
+    var cur = _findIdx >= 0 ? _findIdx + 1 : 0;
+    var ctx = document.getElementById("findOverlayCount");
+    if (ctx) ctx.textContent = cur + "/" + total;
+    document.querySelectorAll("#tabNetwork .find-match").forEach(function(el, i) {
+      var current = _findMatches[_findIdx];
+      el.classList.toggle("find-active", !!current && current.span === el);
+    });
+    updateDetailRequestBodyFindState();
+    document.querySelectorAll("#requestBody tr.find-row").forEach(function(r) {
+      r.classList.toggle("find-active-row", _findMatches[_findIdx] && _findMatches[_findIdx].el === r);
+    });
+  }
+
+  function highlightDetailRequestBody(text, re, lowerNeedle) {
+    var el = document.getElementById('detailReqBody');
+    if (!el || !el.querySelector) return;
+    clearDetailRequestBodyFindHighlights();
+    var textNodes = collectTextNodes(el);
+    textNodes.forEach(function(node) {
+      var rawText = node.nodeValue || '';
+      if (!rawText || rawText.toLowerCase().indexOf(lowerNeedle) === -1) return;
+      var fragment = document.createDocumentFragment();
+      var lastIndex = 0;
+      rawText.replace(re, function(match, _group, offset) {
+        if (offset > lastIndex) fragment.appendChild(document.createTextNode(rawText.slice(lastIndex, offset)));
+        var span = document.createElement('span');
+        span.className = 'find-match detail-request-body-match';
+        span.textContent = match;
+        fragment.appendChild(span);
+        _findMatches.push({ el: el, span: span, match: match, offset: offset });
+        lastIndex = offset + match.length;
+        return match;
+      });
+      if (lastIndex < rawText.length) fragment.appendChild(document.createTextNode(rawText.slice(lastIndex)));
+      if (fragment.childNodes.length > 0) node.parentNode.replaceChild(fragment, node);
+    });
+  }
+
+  function collectTextNodes(root) {
+    var nodes = [];
+    if (!root || !root.ownerDocument) return nodes;
+    var textNodeFilter = typeof NodeFilter !== 'undefined' ? NodeFilter.SHOW_TEXT : 4;
+    var walker = document.createTreeWalker(root, textNodeFilter, null, false);
+    var node;
+    while ((node = walker.nextNode())) {
+      if (!node.nodeValue || !node.nodeValue.trim()) continue;
+      if (node.parentNode && node.parentNode.classList && node.parentNode.classList.contains('find-match')) continue;
+      nodes.push(node);
+    }
+    return nodes;
+  }
+
+  function clearDetailRequestBodyFindHighlights() {
+    var el = document.getElementById('detailReqBody');
+    if (!el) return;
+    el.querySelectorAll('.detail-request-body-match').forEach(function(span) {
+      var tx = document.createTextNode(span.textContent);
+      span.parentNode.replaceChild(tx, span);
+    });
+    if (el.normalize) el.normalize();
+  }
+
+  function updateDetailRequestBodyFindState() {
+    var el = document.getElementById('detailReqBody');
+    if (!el) return;
+    el.querySelectorAll('.detail-request-body-match').forEach(function(span) {
+      var current = _findMatches[_findIdx];
+      span.classList.toggle('find-active', !!current && current.span === span);
+    });
+  }
+
+  function reFind() {
+    var inp = document.querySelector("#findOverlay .find-overlay-input");
+    if (inp && inp.value) doFind(inp.value);
+  }
+
+  /* Find overlay input handler */
+  document.addEventListener("input", function(e) {
+    if (e.target.closest && e.target.closest("#findOverlay") && e.target.classList.contains("find-overlay-input")) {
+      doFind(e.target.value);
+    }
+  });
+
+  /* Enter key navigation in find overlay */
+  document.addEventListener("keydown", function(e) {
+    if (isComposingEvent(e)) return;
+    var overlay = document.getElementById("findOverlay");
+    if (!overlay) return;
+    var inp = overlay.querySelector(".find-overlay-input");
+    if (e.key === "Enter" && document.activeElement === inp) {
+      e.preventDefault();
+      if (e.shiftKey) { _findIdx = _findIdx <= 0 ? _findMatches.length - 1 : _findIdx - 1; }
+      else { _findIdx = _findIdx >= _findMatches.length - 1 ? 0 : _findIdx + 1; }
+      scrollToMatch(_findIdx);
+    }
+    if (e.key === "Escape" && document.activeElement === inp) {
+      inp.value = ""; doFind("");
+    }
+  });
+
+  /* Prev/Next/Close buttons */
+  var foPrev = document.getElementById("findOverlayPrev");
+  if (foPrev) foPrev.addEventListener("click", function() {
+    var oldIdx = _findIdx;
+    var inp = document.querySelector("#findOverlay .find-overlay-input");
+    if (inp && inp.value) { doFind(inp.value); }
+    if (_findMatches.length === 0) return;
+    if (oldIdx >= 0 && oldIdx < _findMatches.length) _findIdx = oldIdx;
+    _findIdx = _findIdx <= 0 ? _findMatches.length - 1 : _findIdx - 1;
+    scrollToMatch(_findIdx);
+  });
+  var foNext = document.getElementById("findOverlayNext");
+  if (foNext) foNext.addEventListener("click", function() {
+    var oldIdx = _findIdx;
+    var inp = document.querySelector("#findOverlay .find-overlay-input");
+    if (inp && inp.value) { doFind(inp.value); }
+    if (_findMatches.length === 0) return;
+    if (oldIdx >= 0 && oldIdx < _findMatches.length) _findIdx = oldIdx;
+    _findIdx = _findIdx >= _findMatches.length - 1 ? 0 : _findIdx + 1;
+    scrollToMatch(_findIdx);
+  });
+  var foClose = document.getElementById("findOverlayClose");
+  if (foClose) foClose.addEventListener("click", function() {
+    var inp = document.querySelector("#findOverlay .find-overlay-input");
+    if (inp) { inp.value = ""; }
+    doFind("");
+  });
+
+  /* Re-find when showing details (clicking request in list) */
+  function statusColor(status) {
+    if (status < 200) return '';
+    if (status < 300) return 's2xx';
+    if (status < 400) return 's3xx';
+    if (status < 500) return 's4xx';
+    return 's5xx';
+  }
+
+  function formatHeaders(headers) {
+    var keys = Object.keys(headers);
+    if (keys.length === 0) return t('common.empty');
+    return keys.map(function(k) { return k + ': ' + headers[k]; }).join('\n');
+  }
+
+  function extractRequestCookies(cookies, cookieHeader) {
+    if (Array.isArray(cookies) && cookies.length) return cookies;
+    return parseCookieHeader(cookieHeader);
+  }
+
+  function extractResponseCookies(cookies, setCookieHeader) {
+    if (Array.isArray(cookies) && cookies.length) return cookies;
+    return parseSetCookieHeader(setCookieHeader);
+  }
+
+  function parseCookieHeader(headerValue) {
+    if (!headerValue) return [];
+    return String(headerValue).split(';').map(function(part) {
+      var idx = part.indexOf('=');
+      if (idx <= 0) return null;
+      return {
+        name: part.slice(0, idx).trim(),
+        value: part.slice(idx + 1).trim()
+      };
+    }).filter(Boolean);
+  }
+
+  function parseSetCookieHeader(headerValue) {
+    if (!headerValue) return [];
+    var lines = Array.isArray(headerValue) ? headerValue : String(headerValue).split(/\r?\n/);
+    return lines.map(function(line) {
+      var first = String(line).split(';')[0];
+      var idx = first.indexOf('=');
+      if (idx <= 0) return null;
+      return {
+        name: first.slice(0, idx).trim(),
+        value: first.slice(idx + 1).trim(),
+        raw: String(line).trim()
+      };
+    }).filter(Boolean);
+  }
+
+  function buildCookieHeader(cookies) {
+    return (cookies || []).map(function(item) {
+      return item.name + '=' + item.value;
+    }).join('; ');
+  }
+
+  function formatCookieLines(cookies) {
+    if (!cookies || cookies.length === 0) return t('common.empty');
+    return cookies.map(function(item) {
+      return item.name + '=' + item.value;
+    }).join('\n');
+  }
+
+  function formatSetCookieLines(cookies) {
+    if (!cookies || cookies.length === 0) return t('common.empty');
+    return cookies.map(function(item) {
+      return item.raw || (item.name + '=' + item.value);
+    }).join('\n');
+  }
+
+  function applyResponseBodyState(req, content, encoding) {
+    var body = content || '';
+    var mimeType = String(req.mimeType || '').toLowerCase();
+    var resHeaders = req.resHeaders || {};
+    var contentLength = Number(resHeaders['content-length'] || 0);
+    var isBinary = isBinaryMimeType(mimeType) || encoding === 'base64';
+
+    if (body) {
+      req.responseBodyState = isBinary ? 'binary' : 'text';
+      req.responseBodyMessage = isBinary
+        ? tt('该响应是二进制资源，当前展示的是编码后的原始内容。', 'This is a binary response. Showing the encoded raw content.')
+        : '';
+      return;
+    }
+
+    if (contentLength === 0 || req.status === 204 || req.method === 'HEAD') {
+      req.responseBodyState = 'empty';
+      req.responseBodyMessage = tt('该请求没有可返回的响应体。', 'This request has no response body.');
+      return;
+    }
+
+    if (isBinary) {
+      req.responseBodyState = 'binary-unavailable';
+      req.responseBodyMessage = tt('该响应是图片或其他二进制资源，浏览器这次没有返回可预览的内容。', 'This response is an image or other binary resource, and the browser did not provide previewable content this time.');
+      return;
+    }
+
+    if (isStreamingLike(req, mimeType)) {
+      req.responseBodyState = 'stream-unavailable';
+      req.responseBodyMessage = tt('该请求更像流式或特殊接口，浏览器未提供完整响应体。', 'This looks like a streaming or special endpoint, and the browser did not provide the full response body.');
+      return;
+    }
+
+    req.responseBodyState = 'unavailable';
+    req.responseBodyMessage = tt('浏览器没有返回这条请求的响应体，通常是受资源类型、跨域策略或 DevTools 能力限制影响。', 'The browser did not return the response body, usually because of resource type, CORS policy, or DevTools capability limits.');
+  }
+
+  function formatResponseBodyDisplay(req, mimeType) {
+    if (!req) return t('common.emptyText');
+    var state = req.responseBodyState || '';
+    if (req.responseContent) {
+      if (state === 'binary' || req.responseEncoding === 'base64') {
+        return formatBinaryBody(req);
+      }
+      return formatBody(req.responseContent, mimeType);
+    }
+    if (state === 'pending') return tt('响应体获取中...', 'Fetching response body...');
+    if (state === 'empty') return req.responseBodyMessage || t('common.emptyText');
+    return req.responseBodyMessage || tt('(未获取到响应体)', '(Response body not available)');
+  }
+
+  function buildMediaPreview(req, mimeType) {
+    if (!req) return '';
+    var mediaKind = getMediaKind(req, mimeType);
+    if (!mediaKind) return '';
+    var previewSrc = buildMediaPreviewSrc(req, mimeType);
+    var openUrl = req.url || '';
+    var note = '';
+    if (!previewSrc && openUrl) {
+      previewSrc = openUrl;
+      note = mediaKind === 'video' || mediaKind === 'audio'
+        ? tt('当前直接使用原始资源地址预览，适合较大的媒体文件。', 'Previewing directly from the original resource URL, which is better for large media files.')
+        : tt('当前直接使用原始资源地址预览。', 'Previewing directly from the original resource URL.');
+    }
+    if (!previewSrc) return '';
+
+    var mediaHtml = '';
+    if (mediaKind === 'image') {
+      mediaHtml = '<img class="response-preview-image" src="' + escAttr(previewSrc) + '" alt="' + escAttr(tt('响应图片预览', 'Response image preview')) + '">';
+    } else if (mediaKind === 'video') {
+      mediaHtml = '<video class="response-preview-video" controls preload="metadata" src="' + escAttr(previewSrc) + '"></video>';
+      if (!note) note = tt('如果视频较大或为分片流媒体，播放器可能依赖原始地址继续分段加载。', 'For large or segmented video streams, the player may keep loading chunks from the original URL.');
+    } else if (mediaKind === 'audio') {
+      mediaHtml = '<audio class="response-preview-audio" controls preload="metadata" src="' + escAttr(previewSrc) + '"></audio>';
+      if (!note) note = tt('音频资源会优先尝试直接播放。', 'Audio resources are previewed with direct playback when possible.');
+    }
+
+    var sourceLabel = req.responseEncoding === 'base64' && req.responseContent ? tt('base64 响应体', 'base64 response body') : tt('原始资源地址', 'original resource URL');
+    var mediaKindLabel = mediaKind === 'image' ? tt('图片', 'image') : (mediaKind === 'video' ? tt('视频', 'video') : tt('音频', 'audio'));
+    var parts = [
+      '<div class="response-preview">',
+      '<div class="response-preview-meta">' + escHtml(tt('已识别为{kind}资源，当前使用 {source} 预览。', 'Detected a {kind} resource. Previewing with {source}.', { kind: mediaKindLabel, source: sourceLabel })) + '</div>',
+      mediaHtml,
+      '<div class="response-preview-actions">' +
+        '<a class="response-preview-link" href="' + escAttr(openUrl || previewSrc) + '" target="_blank" rel="noopener noreferrer">' + escHtml(tt('打开资源', 'Open resource')) + '</a>' +
+        '<button type="button" class="response-preview-link copy-resource-url" data-url="' + escAttr(openUrl || previewSrc) + '">' + escHtml(tt('复制地址', 'Copy URL')) + '</button>' +
+      '</div>'
+    ];
+    if (note) parts.push('<div class="response-preview-note">' + escHtml(note) + '</div>');
+    if (req.responseEncoding === 'base64' && req.responseContent) {
+      parts.push('<pre class="response-preview-code">' + escHtml(req.responseContent) + '</pre>');
+    } else if (req.responseBodyMessage && req.responseBodyState !== 'text') {
+      parts.push('<div class="response-preview-note">' + escHtml(req.responseBodyMessage) + '</div>');
+    }
+    parts.push('</div>');
+    return parts.join('');
+  }
+
+  function buildMediaPreviewSrc(req, mimeType) {
+    if (req.responseEncoding === 'base64' && req.responseContent) {
+      var safeMime = mimeType && mimeType !== '-' ? mimeType : (req.mimeType || 'application/octet-stream');
+      return 'data:' + safeMime + ';base64,' + req.responseContent;
+    }
+    return req.url || '';
+  }
+
+  function getMediaKind(req, mimeType) {
+    var lowerMime = String(mimeType || req.mimeType || '').toLowerCase();
+    var url = String(req.url || '').toLowerCase();
+    if (lowerMime.indexOf('image/') === 0 || /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/.test(url)) return 'image';
+    if (lowerMime.indexOf('video/') === 0 || /\.(mp4|webm|mov|m4v|ogg)(\?|#|$)/.test(url)) return 'video';
+    if (lowerMime.indexOf('audio/') === 0 || /\.(mp3|wav|aac|m4a|oga|ogg)(\?|#|$)/.test(url)) return 'audio';
+    return '';
+  }
+
+  function formatBinaryBody(req) {
+    var lines = [
+      tt('[二进制响应]', '[Binary response]')
+    ];
+    if (req.mimeType) lines.push('Content-Type: ' + req.mimeType);
+    if (req.responseEncoding) lines.push('Encoding: ' + req.responseEncoding);
+    if (req.responseContent) lines.push('', req.responseContent);
+    return lines.join('\n');
+  }
+
+  function isBinaryMimeType(mimeType) {
+    if (!mimeType) return false;
+    return /^(image|audio|video)\//.test(mimeType) ||
+      /application\/octet-stream/.test(mimeType) ||
+      /application\/pdf/.test(mimeType) ||
+      /font\//.test(mimeType);
+  }
+
+  function isStreamingLike(req, mimeType) {
+    if (mimeType.indexOf('event-stream') !== -1) return true;
+    if (mimeType.indexOf('stream') !== -1) return true;
+    var url = String(req.url || '').toLowerCase();
+    if (url.indexOf('/stream') !== -1 || url.indexOf('eventstream') !== -1) return true;
+    return false;
+  }
+
+  function copyTextValue(text, successMessage) {
+    if (!text || text === t('common.empty') || text === '无') {
+      showToast(tt('当前没有可复制的数据', 'Nothing to copy'), 'error');
+      return;
+    }
+    ApiStudioCompat.copyText(text).then(function() {
+      showToast(successMessage);
+    }).catch(function(error) {
+      showToast(tt('复制失败: {message}', 'Copy failed: {message}', { message: error.message }), 'error');
+    });
+  }
+
+  document.addEventListener('mouseenter', function(e) {
+    var hint = e.target.closest('.time-hint');
+    if (!hint || !timeTooltip) return;
+    timeTooltip.textContent = formatTimeSourceHint(hint.dataset.timeSource || '');
+    timeTooltip.style.display = 'block';
+    positionTimeTooltip(e.clientX, e.clientY);
+  }, true);
+
+  document.addEventListener('mousemove', function(e) {
+    var hint = e.target.closest('.time-hint');
+    if (!hint || !timeTooltip || timeTooltip.style.display === 'none') return;
+    positionTimeTooltip(e.clientX, e.clientY);
+  }, true);
+
+  document.addEventListener('mouseleave', function(e) {
+    var hint = e.target.closest('.time-hint');
+    if (!hint || !timeTooltip) return;
+    timeTooltip.style.display = 'none';
+  }, true);
+
+  function positionTimeTooltip(clientX, clientY) {
+    if (!timeTooltip) return;
+    var gap = 12;
+    var maxLeft = window.innerWidth - timeTooltip.offsetWidth - 12;
+    var maxTop = window.innerHeight - timeTooltip.offsetHeight - 12;
+    var left = Math.min(clientX + gap, maxLeft);
+    var top = Math.min(clientY + gap, maxTop);
+    timeTooltip.style.left = Math.max(12, left) + 'px';
+    timeTooltip.style.top = Math.max(12, top) + 'px';
+  }
+
+  function formatBody(body, mimeType) {
+    if (!body) return t('common.emptyText');
+    if (mimeType && mimeType.indexOf('json') !== -1) {
+      try { return JSON.stringify(JSON.parse(body), null, 2); } catch(e) { return body; }
+    }
+    return body;
+  }
+
+  function escHtml(str) {
+    var d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  function escAttr(str) {
+    return String(str === undefined || str === null ? '' : str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function clampNumber(value, min, max) {
+    value = Number(value);
+    if (!isFinite(value)) value = min;
+    return Math.min(max, Math.max(min, value));
+  }
+
+  function nonNegativeNumber(value) {
+    value = Number(value);
+    if (!isFinite(value) || value < 0) return 0;
+    return value;
+  }
+
+  function waitMs(ms) {
+    return new Promise(function(resolve) {
+      setTimeout(resolve, Math.max(0, Number(ms) || 0));
+    });
   }
 
   function formatDateTime(date) {

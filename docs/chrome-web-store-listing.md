@@ -50,7 +50,7 @@ API Studio DevTools 是一款面向前端开发和测试场景的浏览器 DevTo
 ## 审核备注草稿
 
 ```text
-API Studio DevTools is a developer tool extension. It adds a DevTools panel for inspecting and replaying API requests, creating local mock rules, simulating network latency, and debugging cookies or analytics beacons.
+API Studio DevTools is a developer tool extension. It adds a DevTools panel for inspecting and replaying API requests, creating local mock rules, and debugging cookies or analytics beacons.
 
 The extension requests <all_urls> host permissions because developers need to debug API traffic across local, staging, and production domains from the currently inspected page. Request data is processed locally in the browser and is not sent to any external server by this extension.
 
@@ -71,3 +71,4 @@ The extension does not modify system hosts files and does not provide a remote c
 - 确认隐私政策 URL 可以公开访问。
 - 确认截图中没有真实用户数据、Cookie、Token 或公司内部接口。
 - 如果商店要求数据用途声明，按“本地处理，不上传第三方服务器”填写。
+- 如果截图来自本地测试站，确认只展示演示数据。

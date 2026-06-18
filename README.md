@@ -1,6 +1,6 @@
 # API Studio DevTools
 
-API Studio DevTools 是一个浏览器 DevTools 扩展，用来做 API 抓包、重放、Mock、埋点分析和 Cookie 观察。项目现在采用“共享源码 + 浏览器专用 manifest + 构建输出”的结构，Chrome 和 Firefox 共用同一份业务代码，避免后续维护两套重复逻辑。
+API Studio DevTools 是一个浏览器 DevTools 扩展，用来做 API 抓包、重放、Mock、埋点分析和 Cookie 观察。项目采用“共享源码 + 浏览器专用 manifest + 浏览器专用输出目录”的结构，Chrome 和 Firefox 共用同一份业务代码，避免维护两套重复逻辑。
 
 ## 功能亮点
 
@@ -45,6 +45,11 @@ API Studio DevTools 是一个浏览器 DevTools 扩展，用来做 API 抓包、
 
 ## 构建与本地加载
 
+构建输出目录不会作为开发源码维护：
+
+- `chrome-extension/`：Chrome 本地加载目录，也是 Chrome Web Store 上传包生成位置。
+- `firefox-extension/`：Firefox 临时加载目录。
+
 ### Chrome 浏览器
 
 ```bash
@@ -87,6 +92,16 @@ chrome-extension/api-studio-devtools-chrome.zip
 
 上传 Chrome Web Store 时上传这个 zip 即可。zip 顶层会包含 `manifest.json`、JS/CSS/HTML、icons 和 `_locales`，不会包含 `.git/`、`.idea/`、Firefox manifest 或源码备份文件。
 
+## 本地测试站
+
+本仓库不再内置测试网站。用于手动验证插件 Network、Replay、Mock、Beacon、Cookies 和文件上传能力的测试站在同级目录：
+
+```text
+/Users/yangjunhu/Documents/Codex/plugin-test-app
+```
+
+该测试站是独立项目，不会进入 Chrome Web Store 上传包。
+
 ## 权限说明
 
 - `storage`：保存 Mock 规则、命中次数、Replay 历史、分组、主题偏好等本地数据。
@@ -108,3 +123,4 @@ Chrome Web Store 审核时可以参考 [docs/chrome-web-store-listing.md](docs/c
 - Firefox 专用配置只改 `src/firefox/manifest.json`。
 - 不要直接修改 `chrome-extension/` 或 `firefox-extension/`，它们是构建输出目录，已被 Git 忽略。
 - 新增浏览器差异时，优先放到 `src/shared/compat.js` 或 manifest，而不是复制一份业务代码。
+- 打包前先运行 `bash scripts/package-chrome.sh`，确保 Chrome 上传包和最新源码一致。
