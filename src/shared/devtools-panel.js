@@ -25,6 +25,7 @@
   var highlightedRequestIds = {};
   var selectedRuleIds = {};
   var selectedReplayHistoryIds = {};
+  var undoToastSeq = 0;
 
   // ====== DOM ======
   var $ = function(id) { return document.getElementById(id); };
@@ -58,6 +59,7 @@
   var tabBeacon = $('tabBeacon');
   var tabCookies = $('tabCookies');
   var tabReplay = $('tabReplay');
+  var tabQr = $('tabQr');
 
   // Mock
   var mockList = $('mockList');
@@ -161,12 +163,16 @@
   var copyCookiesHeaderBtn = $('copyCookiesHeaderBtn');
   var copyCookiesSetBtn = $('copyCookiesSetBtn');
   var deleteCookiesEntryBtn = $('deleteCookiesEntryBtn');
-  var configModalOverlay = $('configModalOverlay');
-  var configModalTitle = $('configModalTitle');
-  var configModalBody = $('configModalBody');
-  var configModalCloseBtn = $('configModalCloseBtn');
-  var configModalCancelBtn = $('configModalCancelBtn');
-  var configModalSaveBtn = $('configModalSaveBtn');
+  // QR
+  var qrInput = $('qrInput');
+  var qrCanvas = $('qrCanvas');
+  var qrEmpty = $('qrEmpty');
+  var qrMeta = $('qrMeta');
+  var qrStatus = $('qrStatus');
+  var qrUseSelectedUrlBtn = $('qrUseSelectedUrlBtn');
+  var qrClearBtn = $('qrClearBtn');
+  var qrDownloadBtn = $('qrDownloadBtn');
+  var qrCopyBtn = $('qrCopyBtn');
 
   // Modal
   var modalOverlay = $('modalOverlay');
@@ -205,8 +211,7 @@
   };
   var selectedBeaconId = '';
   var beaconConditionsExpanded = false;
-  var configModalMode = '';
-  var configEditingId = '';
+  var qrLastResult = null;
 
   var I18N = {
     zh: {
@@ -218,6 +223,7 @@
       'theme.toggleTitle': '切换主题，当前为 {mode}',
       'tab.network': '网络',
       'tab.replay': '重放',
+      'tab.qr': 'QR',
       'tab.mock': 'Mock',
       'tab.beacon': '埋点',
       'tab.cookies': 'Cookie',
@@ -250,6 +256,19 @@
       'common.unnamed': '未命名',
       'common.notSet': '(未设置)',
       'common.emptyText': '(空)',
+      'undo.action': '撤回',
+      'undo.deletedRule': '已删除规则「{name}」',
+      'undo.deletedRules': '已删除 {count} 条规则',
+      'undo.deletedGroup': '已删除分组「{name}」',
+      'undo.deletedReplay': '已删除保存请求「{name}」',
+      'undo.deletedReplays': '已删除 {count} 条保存请求',
+      'undo.deletedReplayGroup': '已删除 Replay 分组「{name}」',
+      'undo.deletedBeaconCondition': '已删除关注条件',
+      'undo.clearedRequests': '已清空网络请求',
+      'undo.deletedBeacon': '已删除命中记录',
+      'undo.clearedBeacon': '已清空埋点命中',
+      'undo.deletedCookiesEntry': '已删除 Cookies 记录',
+      'undo.clearedCookies': '已清空 Cookies',
       'mock.batchDelete': '🗑 批量删除',
       'mock.batchDeleteCount': '🗑 删除 {count} 条',
       'mock.newRule': '+ 新建规则',
@@ -341,6 +360,27 @@
       'replay.responseResult': '响应结果',
       'replay.responseHeaders': '响应 Headers',
       'replay.responseBody': '响应体',
+      'qr.title': '二维码生成',
+      'qr.subtitle': '输入网址、文本、Deep Link 或口令，插件会在本地生成二维码。',
+      'qr.content': '内容',
+      'qr.placeholder': 'https://example.com 或任意需要扫码的文本',
+      'qr.useSelectedUrl': '使用当前请求 URL',
+      'qr.emptyHint': '输入内容后会自动生成二维码。',
+      'qr.preview': '扫码预览',
+      'qr.privacy': '本地生成，不会把内容发送到第三方接口。',
+      'qr.copyPng': '复制 PNG',
+      'qr.downloadPng': '下载 PNG',
+      'qr.emptyPreview': '等待输入内容',
+      'qr.generated': '已生成 Version {version}，{bytes} bytes',
+      'qr.tooLong': '内容过长，当前最多支持 {max} bytes。',
+      'qr.emptyInput': '请输入要生成二维码的内容。',
+      'qr.noSelectedUrl': '当前没有选中的 Network 请求 URL。',
+      'qr.loadedSelectedUrl': '已带入当前请求 URL',
+      'qr.downloaded': '二维码已下载',
+      'qr.copySuccess': '二维码 PNG 已复制',
+      'qr.copyUnsupported': '当前浏览器不支持复制图片，请使用下载 PNG。',
+      'qr.copyFailed': '复制二维码失败: {message}',
+      'qr.generatorMissing': '二维码生成器加载失败，请刷新插件页面。',
       'beacon.pathPlaceholder': '监控路径关键字，例如 /track 或 /report',
       'beacon.editConditions': '编辑条件',
       'beacon.collapseConditions': '收起条件',
@@ -375,7 +415,6 @@
       'beacon.summaryConditionHit': '条件命中 {count} 项',
       'beacon.summaryConditionMiss': '条件未命中',
       'beacon.summaryEmpty': '无可解析字段',
-      'config.new': '新建配置',
       'cookies.count': '{count} 组 Cookies',
       'cookies.emptyTitle': '暂无 Cookies',
       'cookies.emptyHint': '从 Network 请求详情导入后会显示在这里',
@@ -398,6 +437,7 @@
       'theme.toggleTitle': 'Switch theme, current: {mode}',
       'tab.network': 'Network',
       'tab.replay': 'Replay',
+      'tab.qr': 'QR',
       'tab.mock': 'Mock',
       'tab.beacon': 'Beacon',
       'tab.cookies': 'Cookies',
@@ -430,6 +470,19 @@
       'common.unnamed': 'Unnamed',
       'common.notSet': '(Not set)',
       'common.emptyText': '(Empty)',
+      'undo.action': 'Undo',
+      'undo.deletedRule': 'Deleted rule "{name}"',
+      'undo.deletedRules': 'Deleted {count} rules',
+      'undo.deletedGroup': 'Deleted group "{name}"',
+      'undo.deletedReplay': 'Deleted saved request "{name}"',
+      'undo.deletedReplays': 'Deleted {count} saved requests',
+      'undo.deletedReplayGroup': 'Deleted Replay group "{name}"',
+      'undo.deletedBeaconCondition': 'Deleted watch condition',
+      'undo.clearedRequests': 'Cleared network requests',
+      'undo.deletedBeacon': 'Deleted hit entry',
+      'undo.clearedBeacon': 'Cleared beacon hits',
+      'undo.deletedCookiesEntry': 'Deleted Cookies entry',
+      'undo.clearedCookies': 'Cleared Cookies',
       'mock.batchDelete': '🗑 Batch delete',
       'mock.batchDeleteCount': '🗑 Delete {count}',
       'mock.newRule': '+ New rule',
@@ -521,6 +574,27 @@
       'replay.responseResult': 'Response result',
       'replay.responseHeaders': 'Response Headers',
       'replay.responseBody': 'Response Body',
+      'qr.title': 'QR Code Generator',
+      'qr.subtitle': 'Enter a URL, text, deep link, or token. API Studio generates the QR code locally.',
+      'qr.content': 'Content',
+      'qr.placeholder': 'https://example.com or any text you want to scan',
+      'qr.useSelectedUrl': 'Use selected request URL',
+      'qr.emptyHint': 'Enter content to generate a QR code automatically.',
+      'qr.preview': 'Scan preview',
+      'qr.privacy': 'Generated locally. Nothing is sent to a third-party service.',
+      'qr.copyPng': 'Copy PNG',
+      'qr.downloadPng': 'Download PNG',
+      'qr.emptyPreview': 'Waiting for content',
+      'qr.generated': 'Generated Version {version}, {bytes} bytes',
+      'qr.tooLong': 'Content is too long. The current limit is {max} bytes.',
+      'qr.emptyInput': 'Enter content to generate a QR code.',
+      'qr.noSelectedUrl': 'No Network request URL is currently selected.',
+      'qr.loadedSelectedUrl': 'Loaded the selected request URL',
+      'qr.downloaded': 'QR code downloaded',
+      'qr.copySuccess': 'QR PNG copied',
+      'qr.copyUnsupported': 'This browser cannot copy images here. Use Download PNG instead.',
+      'qr.copyFailed': 'Failed to copy QR code: {message}',
+      'qr.generatorMissing': 'QR generator failed to load. Refresh the extension page.',
       'beacon.pathPlaceholder': 'Path keyword, e.g. /track or /report',
       'beacon.editConditions': 'Edit conditions',
       'beacon.collapseConditions': 'Collapse conditions',
@@ -555,7 +629,6 @@
       'beacon.summaryConditionHit': '{count} condition hits',
       'beacon.summaryConditionMiss': 'Condition missed',
       'beacon.summaryEmpty': 'No parsed fields',
-      'config.new': 'New config',
       'cookies.count': '{count} cookie groups',
       'cookies.emptyTitle': 'No Cookies',
       'cookies.emptyHint': 'Import from Network request details to show them here',
@@ -790,8 +863,6 @@
     setElementText('addReplayMultipartRowBtn', 'replay.addField');
     localizeReplayBodyTypeOptions();
 
-    setElementText('configModalCancelBtn', 'common.cancel');
-    setElementText('configModalSaveBtn', 'common.save');
     setElementText('cancelModalBtn', 'common.cancel');
     setElementText('deleteRuleBtn', 'common.delete');
     setElementText('saveRuleBtn', 'common.save');
@@ -851,6 +922,7 @@
     renderReplayBodyEditor({ forceRows: true });
     renderReplayHistory();
     renderReplayResult(replayRequestId ? findReq(replayRequestId) : null);
+    renderQrTab();
     refreshDetailImportState();
   }
 
@@ -882,6 +954,7 @@
     if (tabBeacon) tabBeacon.classList.toggle('active', tab === 'beacon');
     if (tabCookies) tabCookies.classList.toggle('active', tab === 'cookies');
     if (tabReplay) tabReplay.classList.toggle('active', tab === 'replay');
+    if (tabQr) tabQr.classList.toggle('active', tab === 'qr');
     if (tab === 'mock') loadRules();
     if (tab === 'network') {
       syncImportedState();
@@ -891,7 +964,41 @@
     if (tab === 'beacon') renderBeaconTab();
     if (tab === 'cookies') renderCookiesTab();
     if (tab === 'replay') renderReplayTab();
+    if (tab === 'qr') renderQrTab();
   }
+
+  if (qrInput) {
+    qrInput.addEventListener('input', function() {
+      persistQrText(qrInput.value || '');
+      renderQrTab();
+    });
+  }
+
+  if (qrClearBtn) {
+    qrClearBtn.addEventListener('click', function() {
+      if (qrInput) qrInput.value = '';
+      persistQrText('');
+      renderQrTab();
+    });
+  }
+
+  if (qrUseSelectedUrlBtn) {
+    qrUseSelectedUrlBtn.addEventListener('click', function() {
+      var req = selectedId ? findReq(selectedId) : null;
+      if (!req || !req.url) {
+        setQrStatus(t('qr.noSelectedUrl'), 'error');
+        showToast(t('qr.noSelectedUrl'), 'error');
+        return;
+      }
+      if (qrInput) qrInput.value = req.url;
+      persistQrText(req.url);
+      renderQrTab();
+      showToast(t('qr.loadedSelectedUrl'));
+    });
+  }
+
+  if (qrDownloadBtn) qrDownloadBtn.addEventListener('click', downloadQrPng);
+  if (qrCopyBtn) qrCopyBtn.addEventListener('click', copyQrPng);
 
   // ======================================================================
   // NETWORK LAYOUT RESIZE
@@ -1124,9 +1231,9 @@
       });
 
       // Delete button
-      item.querySelector('[data-action="delete"]').addEventListener('click', async function(e) {
+      item.querySelector('[data-action="delete"]').addEventListener('click', function(e) {
         e.stopPropagation();
-        if (await appConfirm(t('mock.deleteRuleTitle'), tt('删除规则「{name}」？', 'Delete rule "{name}"?', { name: rule.name || t('common.unnamed') }), t('common.delete'))) deleteRule(rule.id);
+        deleteRule(rule.id);
       });
 
       mockList.appendChild(item);
@@ -1279,20 +1386,17 @@
     });
   }
 
-  async function deleteGroup(name) {
+  function deleteGroup(name) {
     var group = normalizeGroup(name);
     if (group === DEFAULT_GROUP) {
       showToast(tt('默认分组不能删除', 'The default group cannot be deleted'), 'error');
       return;
     }
-    var ruleCount = rules.filter(function(rule) {
+    var previousGroups = groups.slice();
+    var previousActiveGroup = activeGroup;
+    var movedRuleIds = rules.filter(function(rule) {
       return normalizeGroup(rule.group) === group;
-    }).length;
-    var message = ruleCount > 0
-      ? tt('删除分组「{name}」？该分组下的 {count} 条规则会移动到默认分组。', 'Delete group "{name}"? {count} rules in it will be moved to the default group.', { name: group, count: ruleCount })
-      : tt('删除分组「{name}」？', 'Delete group "{name}"?', { name: group });
-    if (!await appConfirm(tt('删除分组', 'Delete group'), message, t('common.delete'))) return;
-
+    }).map(function(rule) { return rule.id; });
     groups = groups.filter(function(item) {
       return normalizeGroup(item) !== group;
     });
@@ -1310,7 +1414,22 @@
       syncGroupInput();
       renderGroupDropdown();
       renderRules();
-      showToast(tt('分组已删除', 'Group deleted'));
+      showUndoToast(t('undo.deletedGroup', { name: group }), function() {
+        groups = uniqueGroups([DEFAULT_GROUP].concat(previousGroups));
+        activeGroup = previousActiveGroup;
+        rules.forEach(function(rule) {
+          if (movedRuleIds.indexOf(rule.id) !== -1) rule.group = group;
+        });
+        chrome.storage.local.set({
+          rules: rules,
+          mockGroups: groups,
+          activeMockGroup: activeGroup
+        }, function() {
+          syncGroupInput();
+          renderGroupDropdown();
+          renderRules();
+        });
+      });
     });
   }
 
@@ -1599,10 +1718,18 @@
   }
 
   function deleteRule(ruleId) {
+    var index = rules.findIndex(function(rule) { return rule.id === ruleId; });
+    var deletedRule = index >= 0 ? cloneData(rules[index]) : null;
+    var deletedHit = deletedRule ? ruleHits[ruleId] : undefined;
     chrome.runtime.sendMessage({ type: 'DELETE_RULE', ruleId: ruleId }, function() {
       delete selectedRuleIds[ruleId];
       if (editingRule && editingRule.id === ruleId) hideModal();
       loadRules();
+      if (deletedRule) {
+        showUndoToast(t('undo.deletedRule', { name: deletedRule.name || t('common.unnamed') }), function() {
+          restoreDeletedRules([{ item: deletedRule, index: index, hit: deletedHit }]);
+        });
+      }
     });
   }
 
@@ -1617,8 +1744,8 @@
     });
   }
 
-  deleteRuleBtn.addEventListener('click', async function() {
-    if (editingRule && await appConfirm(t('mock.deleteRuleTitle'), tt('删除规则「{name}」？', 'Delete rule "{name}"?', { name: editingRule.name || t('common.unnamed') }), t('common.delete'))) deleteRule(editingRule.id);
+  deleteRuleBtn.addEventListener('click', function() {
+    if (editingRule) deleteRule(editingRule.id);
   });
 
   if (clearHitsBtn) {
@@ -1646,17 +1773,21 @@
   }
 
   if (batchDeleteBtn) {
-    batchDeleteBtn.addEventListener('click', async function() {
+    batchDeleteBtn.addEventListener('click', function() {
       var ids = Object.keys(selectedRuleIds);
       if (ids.length === 0) return;
-      if (!await appConfirm(tt('批量删除', 'Batch delete'), tt('确定删除选中的 {count} 条规则？', 'Delete {count} selected rules?', { count: ids.length }), t('common.delete'))) return;
       var deleteMap = {};
       ids.forEach(function(id) { deleteMap[id] = true; });
+      var deletedEntries = rules.map(function(rule, index) {
+        return deleteMap[rule.id] ? { item: cloneData(rule), index: index, hit: ruleHits[rule.id] } : null;
+      }).filter(Boolean);
       chrome.runtime.sendMessage({ type: 'DELETE_RULES', ruleIds: ids }, function() {
         selectedRuleIds = {};
         if (editingRule && deleteMap[editingRule.id]) hideModal();
         loadRules();
-        showToast(tt('已删除 {count} 条规则', 'Deleted {count} rules', { count: ids.length }));
+        showUndoToast(t('undo.deletedRules', { count: deletedEntries.length }), function() {
+          restoreDeletedRules(deletedEntries);
+        });
       });
     });
   }
@@ -2069,13 +2200,6 @@
     hideAllImportMenus();
   });
 
-  if (configModalCloseBtn) configModalCloseBtn.addEventListener('click', hideConfigModal);
-  if (configModalCancelBtn) configModalCancelBtn.addEventListener('click', hideConfigModal);
-  if (configModalSaveBtn) configModalSaveBtn.addEventListener('click', saveConfigModal);
-  if (configModalOverlay) configModalOverlay.addEventListener('click', function(e) {
-    if (e.target === configModalOverlay) hideConfigModal();
-  });
-
   // Context menu action
   if (ctxMenu) {
     ctxMenu.addEventListener('click', function() {
@@ -2090,9 +2214,16 @@
 
   if (clearBtn) {
     clearBtn.addEventListener('click', function() {
+      var previousRequests = requests.map(cloneData);
+      var previousSelectedId = selectedId;
+      var previousReplayId = replayRequestId;
+      var previousBeaconId = selectedBeaconId;
+      var previousHighlighted = Object.assign({}, highlightedRequestIds);
       requests.length = 0;
       selectedId = null;
       replayRequestId = null;
+      selectedBeaconId = '';
+      highlightedRequestIds = {};
       resetLatestRequestState();
       if (detailEmpty) detailEmpty.style.display = 'flex';
       if (detailContent) detailContent.style.display = 'none';
@@ -2100,7 +2231,26 @@
       renderBeaconTab();
       renderReplayTab();
       updateBadge();
-      chrome.storage.local.set({ capturedRequests: [] });
+      chrome.storage.local.get('capturedRequests', function(result) {
+        var previousStoredRequests = (result.capturedRequests || []).map(cloneData);
+        chrome.storage.local.set({ capturedRequests: [] }, function() {
+          if (!previousRequests.length && !previousStoredRequests.length) return;
+          showUndoToast(t('undo.clearedRequests'), function() {
+            requests = previousRequests.map(cloneData);
+            selectedId = previousSelectedId;
+            replayRequestId = previousReplayId;
+            selectedBeaconId = previousBeaconId;
+            highlightedRequestIds = Object.assign({}, previousHighlighted);
+            chrome.storage.local.set({ capturedRequests: previousStoredRequests.map(cloneData) });
+            syncLatestRequestFromList();
+            renderNetworkList();
+            renderBeaconTab();
+            renderReplayTab();
+            updateBadge();
+            if (selectedId) showDetails(selectedId);
+          });
+        });
+      });
     });
   }
 
@@ -2142,6 +2292,7 @@
     beaconConditions.addEventListener('click', function(e) {
       var btn = e.target.closest('[data-action="delete-beacon-condition"]');
       if (!btn) return;
+      var previousConditions = getBeaconConditions();
       var row = btn.closest('.beacon-condition-row');
       if (row) row.remove();
       syncBeaconConditionsFromDom();
@@ -2150,6 +2301,15 @@
       persistBeaconConfig();
       renderBeaconConditionSummary();
       renderBeaconTab();
+      if (previousConditions.length) {
+        showUndoToast(t('undo.deletedBeaconCondition'), function() {
+          beaconConfig.conditions = previousConditions.map(cloneData);
+          beaconConditionsExpanded = true;
+          persistBeaconConfig();
+          renderBeaconConditionRows();
+          renderBeaconTab();
+        });
+      }
     });
   }
 
@@ -2179,15 +2339,36 @@
 
   if (clearBeaconBtn) {
     clearBeaconBtn.addEventListener('click', function() {
+      var previousRequests = requests.map(cloneData);
+      var previousSelectedId = selectedId;
+      var previousBeaconId = selectedBeaconId;
+      var previousHighlighted = Object.assign({}, highlightedRequestIds);
       requests.length = 0;
       selectedId = null;
       selectedBeaconId = '';
+      highlightedRequestIds = {};
       resetLatestRequestState();
       renderNetworkList();
       renderBeaconTab();
       updateBadge();
-      chrome.storage.local.set({ capturedRequests: [] });
-      showToast(tt('埋点命中已清空', 'Beacon hits cleared'));
+      chrome.storage.local.get('capturedRequests', function(result) {
+        var previousStoredRequests = (result.capturedRequests || []).map(cloneData);
+        chrome.storage.local.set({ capturedRequests: [] }, function() {
+          if (!previousRequests.length && !previousStoredRequests.length) return;
+          showUndoToast(t('undo.clearedBeacon'), function() {
+            requests = previousRequests.map(cloneData);
+            selectedId = previousSelectedId;
+            selectedBeaconId = previousBeaconId;
+            highlightedRequestIds = Object.assign({}, previousHighlighted);
+            chrome.storage.local.set({ capturedRequests: previousStoredRequests.map(cloneData) });
+            syncLatestRequestFromList();
+            renderNetworkList();
+            renderBeaconTab();
+            updateBadge();
+            if (selectedId) showDetails(selectedId);
+          });
+        });
+      });
     });
   }
 
@@ -2215,11 +2396,20 @@
 
   if (clearCookiesBtn) {
     clearCookiesBtn.addEventListener('click', function() {
+      var previousEntries = cookieEntries.map(cloneData);
+      var previousSelectedId = selectedCookieEntryId;
       cookieEntries = [];
       selectedCookieEntryId = null;
       persistCookieEntries();
       renderCookiesTab();
-      showToast(tt('Cookies 已清空', 'Cookies cleared'));
+      if (previousEntries.length) {
+        showUndoToast(t('undo.clearedCookies'), function() {
+          cookieEntries = previousEntries.map(cloneData);
+          selectedCookieEntryId = previousSelectedId;
+          persistCookieEntries();
+          renderCookiesTab();
+        });
+      }
     });
   }
 
@@ -2240,11 +2430,20 @@
   if (deleteCookiesEntryBtn) {
     deleteCookiesEntryBtn.addEventListener('click', function() {
       if (!selectedCookieEntryId) return;
+      var deletedIndex = cookieEntries.findIndex(function(item) { return item.id === selectedCookieEntryId; });
+      var deletedEntry = deletedIndex >= 0 ? cloneData(cookieEntries[deletedIndex]) : null;
       cookieEntries = cookieEntries.filter(function(item) { return item.id !== selectedCookieEntryId; });
       selectedCookieEntryId = cookieEntries[0] ? cookieEntries[0].id : null;
       persistCookieEntries();
       renderCookiesTab();
-      showToast(tt('Cookies 记录已删除', 'Cookies entry deleted'));
+      if (deletedEntry) {
+        showUndoToast(t('undo.deletedCookiesEntry'), function() {
+          cookieEntries = insertAt(cookieEntries.filter(function(item) { return item.id !== deletedEntry.id; }), cloneData(deletedEntry), deletedIndex);
+          selectedCookieEntryId = deletedEntry.id;
+          persistCookieEntries();
+          renderCookiesTab();
+        });
+      }
     });
   }
 
@@ -2477,11 +2676,20 @@
     replayBatchDeleteBtn.addEventListener('click', function() {
       var ids = Object.keys(selectedReplayHistoryIds);
       if (ids.length === 0) return;
+      var idMap = {};
+      ids.forEach(function(id) { idMap[id] = true; });
+      var deletedEntries = replayHistory.map(function(item, index) {
+        return idMap[item.id] ? { item: cloneData(item), index: index } : null;
+      }).filter(Boolean);
       replayHistory = replayHistory.filter(function(item) { return !selectedReplayHistoryIds[item.id]; });
       selectedReplayHistoryIds = {};
       persistReplayHistory();
       renderReplayHistory();
       setReplayStatus(tt('已删除 {count} 条保存请求', 'Deleted {count} saved requests', { count: ids.length }), 'success');
+      showUndoToast(t('undo.deletedReplays', { count: deletedEntries.length }), function() {
+        restoreReplayHistoryEntries(deletedEntries, { group: activeReplayGroup });
+        setReplayStatus(tt('已恢复保存请求', 'Saved request restored'), 'success');
+      });
     });
   }
 
@@ -3961,20 +4169,17 @@
     showToast(tt('已切换到分组：{name}', 'Switched to group: {name}', { name: next }));
   }
 
-  async function deleteReplayGroup(name) {
+  function deleteReplayGroup(name) {
     var group = normalizeReplayGroup(name);
     if (group === DEFAULT_REPLAY_GROUP) {
       showToast(tt('默认分组不能删除', 'The default group cannot be deleted'), 'error');
       return;
     }
-    var itemCount = replayHistory.filter(function(item) {
+    var previousReplayGroups = replayGroups.slice();
+    var previousActiveReplayGroup = activeReplayGroup;
+    var movedHistoryIds = replayHistory.filter(function(item) {
       return normalizeReplayGroup(item.group) === group;
-    }).length;
-    var message = itemCount > 0
-      ? tt('删除分组「{name}」？该分组下的 {count} 条保存请求会移动到默认分组。', 'Delete group "{name}"? {count} saved requests in it will be moved to the default group.', { name: group, count: itemCount })
-      : tt('删除分组「{name}」？', 'Delete group "{name}"?', { name: group });
-    if (!await appConfirm(tt('删除分组', 'Delete group'), message, t('common.delete'))) return;
-
+    }).map(function(item) { return item.id; });
     replayGroups = replayGroups.filter(function(item) {
       return normalizeReplayGroup(item) !== group;
     });
@@ -3989,7 +4194,19 @@
     persistReplayHistory();
     renderReplayHistory();
     loadFirstVisibleReplayHistory();
-    showToast(tt('分组已删除', 'Group deleted'));
+    showUndoToast(t('undo.deletedReplayGroup', { name: group }), function() {
+      replayGroups = uniqueReplayGroups([DEFAULT_REPLAY_GROUP].concat(previousReplayGroups));
+      activeReplayGroup = previousActiveReplayGroup;
+      replayHistory.forEach(function(item) {
+        if (movedHistoryIds.indexOf(item.id) !== -1) item.group = group;
+      });
+      persistReplayGroups();
+      persistReplayHistory();
+      syncReplayGroupInput();
+      renderReplayGroupDropdown();
+      renderReplayHistory();
+      loadFirstVisibleReplayHistory();
+    });
   }
 
   async function moveReplayHistoryToGroup(id) {
@@ -4485,11 +4702,20 @@
   }
 
   function deleteReplayHistoryEntry(id) {
+    var index = replayHistory.findIndex(function(item) { return item.id === id; });
+    var deletedItem = index >= 0 ? cloneData(replayHistory[index]) : null;
+    var group = deletedItem ? normalizeReplayGroup(deletedItem.group) : activeReplayGroup;
     replayHistory = replayHistory.filter(function(item) { return item.id !== id; });
     delete selectedReplayHistoryIds[id];
     persistReplayHistory();
     renderReplayHistory();
     setReplayStatus(tt('保存请求已删除', 'Saved request deleted'), 'success');
+    if (deletedItem) {
+      showUndoToast(t('undo.deletedReplay', { name: replayHistoryNameText(deletedItem) }), function() {
+        restoreReplayHistoryEntries([{ item: deletedItem, index: index }], { group: group, focusId: deletedItem.id });
+        setReplayStatus(tt('已恢复保存请求', 'Saved request restored'), 'success');
+      });
+    }
   }
 
   function resendSelectedRequest() {
@@ -5081,6 +5307,8 @@
 
   function deleteBeaconMatch(id) {
     if (!id) return;
+    var requestIndex = requests.findIndex(function(req) { return req.id === id; });
+    var deletedReq = requestIndex >= 0 ? cloneData(requests[requestIndex]) : null;
     requests = requests.filter(function(req) { return req.id !== id; });
     delete highlightedRequestIds[id];
     syncLatestRequestFromList();
@@ -5091,13 +5319,33 @@
       if (detailContent) detailContent.style.display = 'none';
     }
     chrome.storage.local.get('capturedRequests', function(result) {
-      var list = (result.capturedRequests || []).filter(function(req) { return req.id !== id; });
-      chrome.storage.local.set({ capturedRequests: list });
+      var capturedList = result.capturedRequests || [];
+      var capturedIndex = capturedList.findIndex(function(req) { return req.id === id; });
+      var capturedReq = capturedIndex >= 0 ? cloneData(capturedList[capturedIndex]) : null;
+      var list = capturedList.filter(function(req) { return req.id !== id; });
+      chrome.storage.local.set({ capturedRequests: list }, function() {
+        if (deletedReq || capturedReq) {
+          showUndoToast(t('undo.deletedBeacon'), function() {
+            var restoreReq = cloneData(deletedReq || capturedReq);
+            if (restoreReq && !requests.some(function(req) { return req.id === restoreReq.id; })) {
+              requests = insertAt(requests, restoreReq, requestIndex >= 0 ? requestIndex : 0);
+            }
+            chrome.storage.local.get('capturedRequests', function(nextResult) {
+              var nextList = (nextResult.capturedRequests || []).filter(function(req) { return req.id !== id; });
+              if (capturedReq || restoreReq) nextList = insertAt(nextList, cloneData(capturedReq || restoreReq), capturedIndex >= 0 ? capturedIndex : 0);
+              chrome.storage.local.set({ capturedRequests: nextList });
+            });
+            selectedBeaconId = id;
+            renderNetworkList();
+            renderBeaconTab();
+            updateBadge();
+          });
+        }
+      });
     });
     renderNetworkList();
     renderBeaconTab();
     updateBadge();
-    showToast(tt('命中记录已删除', 'Hit entry deleted'));
   }
 
   function isBeaconMatch(req) {
@@ -5116,13 +5364,11 @@
     try {
       var u = new URL(req.url || '');
       u.searchParams.forEach(function(value, key) {
-        if (query[key] === undefined) query[key] = value;
-        else if (Array.isArray(query[key])) query[key].push(value);
-        else query[key] = [query[key], value];
+        appendBeaconParam(query, key, normalizeBeaconDecodedValue(value, 0, key));
       });
     } catch (e) {}
     var bodyRaw = req.postData || '';
-    var bodyParsed = parseBeaconBody(bodyRaw, req.headers || {});
+    var bodyParsed = parseBeaconBody(bodyRaw, req.headers || {}, req.postDataParams || []);
     return {
       query: query,
       body: bodyParsed,
@@ -5133,27 +5379,170 @@
     };
   }
 
-  function parseBeaconBody(bodyRaw, headers) {
+  function parseBeaconBody(bodyRaw, headers, postDataParams) {
+    if (!bodyRaw && Array.isArray(postDataParams) && postDataParams.length) {
+      var bodyFromParams = {};
+      normalizePostDataParams(postDataParams).forEach(function(item) {
+        appendBeaconParam(bodyFromParams, item.key, normalizeBeaconDecodedValue(item.value, 0, item.key));
+      });
+      return bodyFromParams;
+    }
     if (!bodyRaw) return {};
     var contentType = String((headers || {})['content-type'] || '').toLowerCase();
     if (contentType.indexOf('json') !== -1) {
-      try { return JSON.parse(bodyRaw); } catch (e) {}
+      try { return normalizeBeaconDecodedValue(JSON.parse(bodyRaw), 0, 'body'); } catch (e) {}
     }
-    if (contentType.indexOf('x-www-form-urlencoded') !== -1) {
-      var form = {};
-      String(bodyRaw).split('&').forEach(function(pair) {
-        if (!pair) return;
-        var idx = pair.indexOf('=');
-        var key = decodeURIComponent(idx >= 0 ? pair.slice(0, idx) : pair);
-        var value = decodeURIComponent(idx >= 0 ? pair.slice(idx + 1) : '');
-        if (form[key] === undefined) form[key] = value;
-        else if (Array.isArray(form[key])) form[key].push(value);
-        else form[key] = [form[key], value];
+    if (contentType.indexOf('x-www-form-urlencoded') !== -1 || looksLikeBeaconParamString(bodyRaw, '&', { allowSingle: true })) {
+      return parseBeaconParamString(bodyRaw, '&');
+    }
+    try { return normalizeBeaconDecodedValue(JSON.parse(bodyRaw), 0, 'body'); } catch (e2) {}
+    return { raw: normalizeBeaconDecodedValue(bodyRaw, 0, 'raw') };
+  }
+
+  function appendBeaconParam(target, key, value) {
+    key = decodeBeaconText(key);
+    if (!key) return;
+    if (target[key] === undefined) target[key] = value;
+    else if (Array.isArray(target[key])) target[key].push(value);
+    else target[key] = [target[key], value];
+  }
+
+  function parseBeaconParamString(raw, separator) {
+    separator = separator || '&';
+    var form = {};
+    splitBeaconParamPairs(raw, separator).forEach(function(pair) {
+      if (!pair) return;
+      var idx = pair.indexOf('=');
+      var key = idx >= 0 ? pair.slice(0, idx) : pair;
+      var value = idx >= 0 ? pair.slice(idx + 1) : '';
+      appendBeaconParam(form, key, normalizeBeaconDecodedValue(value, 0, key));
+    });
+    return form;
+  }
+
+  function splitBeaconParamPairs(raw, separator) {
+    var text = String(raw || '');
+    if (separator !== '$') return text.split(separator);
+    var pairs = [];
+    var start = 0;
+    var depth = 0;
+    var quote = '';
+    var escaped = false;
+    for (var i = 0; i < text.length; i++) {
+      var ch = text.charAt(i);
+      if (quote) {
+        if (escaped) {
+          escaped = false;
+        } else if (ch === '\\') {
+          escaped = true;
+        } else if (ch === quote) {
+          quote = '';
+        }
+        continue;
+      }
+      if (ch === '"' || ch === "'") {
+        quote = ch;
+        continue;
+      }
+      if (ch === '{' || ch === '[') {
+        depth++;
+        continue;
+      }
+      if (ch === '}' || ch === ']') {
+        depth = Math.max(0, depth - 1);
+        continue;
+      }
+      if (ch !== separator || depth > 0) continue;
+      if (!isBeaconParamBoundary(text, i, separator)) continue;
+      pairs.push(text.slice(start, i));
+      start = i + 1;
+    }
+    pairs.push(text.slice(start));
+    return pairs;
+  }
+
+  function isBeaconParamBoundary(text, index, separator) {
+    if (text.charAt(index) !== separator) return false;
+    var rest = text.slice(index + 1);
+    var eqIndex = rest.indexOf('=');
+    if (eqIndex <= 0 || eqIndex > 80) return false;
+    var key = rest.slice(0, eqIndex);
+    return /^[A-Za-z0-9_.:-]+$/.test(key);
+  }
+
+  function normalizeBeaconDecodedValue(value, depth, key) {
+    depth = depth || 0;
+    if (depth > 5) return value;
+    if (Array.isArray(value)) {
+      return value.map(function(item) { return normalizeBeaconDecodedValue(item, depth + 1, key); });
+    }
+    if (value && typeof value === 'object') {
+      var obj = {};
+      Object.keys(value).forEach(function(itemKey) {
+        obj[itemKey] = normalizeBeaconDecodedValue(value[itemKey], depth + 1, itemKey);
       });
-      return form;
+      return obj;
     }
-    try { return JSON.parse(bodyRaw); } catch (e2) {}
-    return { raw: bodyRaw };
+    if (typeof value !== 'string') return value;
+
+    var decoded = decodeBeaconText(value);
+    var trimmed = decoded.trim();
+    if (!trimmed) return decoded;
+
+    var jsonParsed = tryParseBeaconJson(trimmed);
+    if (jsonParsed.ok) return normalizeBeaconDecodedValue(jsonParsed.value, depth + 1, key);
+
+    // 生产埋点里常见的“加密串”多数是多层 URL 编码：先还原文本，再按埋点分隔符拆字段并递归解码字段值。
+    if (!isLikelyUrl(trimmed) && looksLikeBeaconParamString(trimmed, '$')) {
+      return parseBeaconParamString(trimmed, '$');
+    }
+    if (!isLikelyUrl(trimmed) && looksLikeBeaconParamString(trimmed, '&')) {
+      return parseBeaconParamString(trimmed, '&');
+    }
+    if (!isLikelyUrl(trimmed) && key && String(key).toLowerCase() === 'ext' && looksLikeBeaconParamString(trimmed, '&', { allowSingle: true })) {
+      return parseBeaconParamString(trimmed, '&');
+    }
+    return decoded;
+  }
+
+  function decodeBeaconText(value) {
+    var text = String(value === undefined || value === null ? '' : value).replace(/\+/g, ' ');
+    for (var i = 0; i < 5; i++) {
+      var next = safeDecodeBeaconURIComponent(text);
+      if (next === text) break;
+      text = next;
+    }
+    return text;
+  }
+
+  function safeDecodeBeaconURIComponent(value) {
+    try {
+      return decodeURIComponent(value);
+    } catch (e) {
+      return value;
+    }
+  }
+
+  function tryParseBeaconJson(text) {
+    if (!text || !/^[\[{]/.test(text)) return { ok: false, value: null };
+    try {
+      return { ok: true, value: JSON.parse(text) };
+    } catch (e) {
+      return { ok: false, value: null };
+    }
+  }
+
+  function looksLikeBeaconParamString(text, separator, options) {
+    options = options || {};
+    text = String(text || '');
+    if (text.indexOf('=') <= 0) return false;
+    if (separator && text.indexOf(separator) === -1 && separator !== '&') return false;
+    if (separator === '&' && text.indexOf('&') === -1) return !!options.allowSingle;
+    return true;
+  }
+
+  function isLikelyUrl(text) {
+    return /^https?:\/\//i.test(String(text || ''));
   }
 
   function matchBeaconConditions(source, conditions) {
@@ -5522,6 +5911,160 @@
     var idx = list.findIndex(function(entry) { return entry.id === item.id; });
     if (idx >= 0) list[idx] = item;
     else list.unshift(item);
+  }
+
+  // ======================================================================
+  // QR CODE TAB
+  // ======================================================================
+
+  function loadQrText() {
+    if (!qrInput) return;
+    try { qrInput.value = localStorage.getItem('apiStudioQrText') || ''; } catch (e) {}
+  }
+
+  function persistQrText(text) {
+    try { localStorage.setItem('apiStudioQrText', text || ''); } catch (e) {}
+  }
+
+  function renderQrTab() {
+    if (!qrInput || !qrCanvas) return;
+    var text = qrInput.value || '';
+    var maxBytes = (window.ApiStudioQr && window.ApiStudioQr.maxBytes) || 271;
+    var bytes = getQrByteLength(text);
+    if (qrMeta) qrMeta.textContent = bytes + ' / ' + maxBytes + ' bytes';
+
+    if (!text) {
+      qrLastResult = null;
+      drawQrPlaceholder();
+      setQrStatus(t('qr.emptyHint'));
+      updateQrActions(false);
+      return;
+    }
+
+    if (!window.ApiStudioQr || typeof window.ApiStudioQr.create !== 'function') {
+      qrLastResult = null;
+      drawQrPlaceholder();
+      setQrStatus(t('qr.generatorMissing'), 'error');
+      updateQrActions(false);
+      return;
+    }
+
+    try {
+      qrLastResult = window.ApiStudioQr.create(text);
+      drawQrModules(qrCanvas, qrLastResult.modules);
+      setQrStatus(t('qr.generated', { version: qrLastResult.version, bytes: qrLastResult.bytes }), 'success');
+      updateQrActions(true);
+    } catch (error) {
+      qrLastResult = null;
+      drawQrPlaceholder();
+      var message = error && error.message === 'TOO_LONG'
+        ? t('qr.tooLong', { max: maxBytes })
+        : (error && error.message === 'EMPTY_INPUT' ? t('qr.emptyInput') : String(error && error.message || error));
+      setQrStatus(message, 'error');
+      updateQrActions(false);
+    }
+  }
+
+  function updateQrActions(enabled) {
+    if (qrDownloadBtn) qrDownloadBtn.disabled = !enabled;
+    if (qrCopyBtn) qrCopyBtn.disabled = !enabled;
+  }
+
+  function setQrStatus(message, type) {
+    if (!qrStatus) return;
+    qrStatus.textContent = message || '';
+    qrStatus.className = 'qr-status' + (type ? ' ' + type : '');
+  }
+
+  function getQrByteLength(text) {
+    if (!text) return 0;
+    if (typeof TextEncoder !== 'undefined') return new TextEncoder().encode(text).length;
+    return unescape(encodeURIComponent(text)).length;
+  }
+
+  function drawQrPlaceholder() {
+    if (!qrCanvas) return;
+    var ctx = qrCanvas.getContext('2d');
+    qrCanvas.width = 320;
+    qrCanvas.height = 320;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, qrCanvas.width, qrCanvas.height);
+    qrCanvas.classList.add('is-empty');
+    if (qrEmpty) qrEmpty.classList.add('show');
+  }
+
+  function drawQrModules(canvas, modules) {
+    if (!canvas || !modules || !modules.length) return;
+    var size = modules.length;
+    var quiet = 4;
+    var width = 320;
+    var height = 320;
+    canvas.width = width;
+    canvas.height = height;
+    canvas.classList.remove('is-empty');
+    if (qrEmpty) qrEmpty.classList.remove('show');
+
+    var ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, width, height);
+
+    var cell = Math.max(1, Math.floor(Math.min(width, height) / (size + quiet * 2)));
+    var qrSize = cell * (size + quiet * 2);
+    var offsetX = Math.floor((width - qrSize) / 2) + quiet * cell;
+    var offsetY = Math.floor((height - qrSize) / 2) + quiet * cell;
+
+    ctx.fillStyle = '#111827';
+    for (var y = 0; y < size; y++) {
+      for (var x = 0; x < size; x++) {
+        if (modules[y][x]) ctx.fillRect(offsetX + x * cell, offsetY + y * cell, cell, cell);
+      }
+    }
+  }
+
+  function ensureQrReady() {
+    if (qrLastResult) return true;
+    renderQrTab();
+    if (!qrLastResult) {
+      showToast((qrStatus && qrStatus.textContent) || t('qr.emptyInput'), 'error');
+      return false;
+    }
+    return true;
+  }
+
+  function downloadQrPng() {
+    if (!qrCanvas || !ensureQrReady()) return;
+    var link = document.createElement('a');
+    link.href = qrCanvas.toDataURL('image/png');
+    link.download = 'api-studio-qr-' + formatDownloadTimestamp(new Date()) + '.png';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    showToast(t('qr.downloaded'));
+  }
+
+  function copyQrPng() {
+    if (!qrCanvas || !ensureQrReady()) return;
+    if (!navigator.clipboard || typeof ClipboardItem === 'undefined') {
+      showToast(t('qr.copyUnsupported'), 'error');
+      return;
+    }
+    qrCanvas.toBlob(function(blob) {
+      if (!blob) {
+        showToast(t('qr.copyUnsupported'), 'error');
+        return;
+      }
+      navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]).then(function() {
+        showToast(t('qr.copySuccess'));
+      }).catch(function(error) {
+        showToast(t('qr.copyFailed', { message: error && error.message ? error.message : String(error) }), 'error');
+      });
+    }, 'image/png');
+  }
+
+  function formatDownloadTimestamp(date) {
+    function pad(value) { return String(value).padStart(2, '0'); }
+    return date.getFullYear() + pad(date.getMonth() + 1) + pad(date.getDate()) + '-' + pad(date.getHours()) + pad(date.getMinutes()) + pad(date.getSeconds());
   }
 
   // ======================================================================
@@ -6202,6 +6745,122 @@
     toast._timer = setTimeout(function() { toast.classList.remove('show'); }, 2500);
   }
 
+  function showUndoToast(message, undoFn) {
+    var stack = document.getElementById('undoToastStack');
+    if (!stack) {
+      stack = document.createElement('div');
+      stack.id = 'undoToastStack';
+      stack.className = 'undo-toast-stack';
+      document.body.appendChild(stack);
+    }
+
+    var item = document.createElement('div');
+    item.className = 'undo-toast';
+    item.dataset.undoToastId = String(++undoToastSeq);
+
+    var text = document.createElement('span');
+    text.className = 'undo-toast-message';
+    text.textContent = message || '';
+
+    var button = document.createElement('button');
+    button.className = 'undo-toast-action';
+    button.type = 'button';
+    button.innerHTML = '<span class="undo-toast-icon" aria-hidden="true">↶</span><span>' + escHtml(t('undo.action')) + '</span>';
+
+    item.appendChild(text);
+    item.appendChild(button);
+    stack.appendChild(item);
+
+    var closed = false;
+    function close() {
+      if (closed) return;
+      closed = true;
+      item.classList.remove('show');
+      item.classList.add('hide');
+      setTimeout(function() {
+        if (item.parentNode) item.parentNode.removeChild(item);
+        if (stack && stack.parentNode && stack.children.length === 0) stack.parentNode.removeChild(stack);
+      }, 240);
+    }
+
+    var timer = setTimeout(close, 3000);
+    button.addEventListener('click', function() {
+      clearTimeout(timer);
+      try {
+        if (typeof undoFn === 'function') undoFn();
+      } finally {
+        close();
+      }
+    });
+    requestAnimationFrame(function() { item.classList.add('show'); });
+  }
+
+  function cloneData(value) {
+    return value === undefined ? value : JSON.parse(JSON.stringify(value));
+  }
+
+  function insertAt(list, item, index) {
+    var next = list.slice();
+    var safeIndex = Math.max(0, Math.min(Number(index) || 0, next.length));
+    next.splice(safeIndex, 0, item);
+    return next;
+  }
+
+  function insertManyAtOriginalPositions(list, entries) {
+    var next = list.slice();
+    (entries || []).slice().sort(function(a, b) {
+      return (Number(a.index) || 0) - (Number(b.index) || 0);
+    }).forEach(function(entry) {
+      next = insertAt(next, cloneData(entry.item), entry.index);
+    });
+    return next;
+  }
+
+  function restoreDeletedRules(entries) {
+    entries = entries || [];
+    if (!entries.length) return;
+    chrome.storage.local.get(['rules', 'ruleHits'], function(result) {
+      var ids = {};
+      entries.forEach(function(entry) { if (entry && entry.item && entry.item.id) ids[entry.item.id] = true; });
+      var nextRules = (result.rules || []).filter(function(rule) { return !ids[rule.id]; });
+      var nextHits = Object.assign({}, result.ruleHits || {});
+      entries.forEach(function(entry) {
+        if (!entry || !entry.item || !entry.item.id) return;
+        if (entry.hit === undefined) delete nextHits[entry.item.id];
+        else nextHits[entry.item.id] = entry.hit;
+      });
+      nextRules = insertManyAtOriginalPositions(nextRules, entries);
+      chrome.storage.local.set({ rules: nextRules, ruleHits: nextHits }, function() {
+        rules = nextRules;
+        ruleHits = nextHits;
+        loadMockGroups(function() {
+          updateHitSummary();
+          renderRules();
+        });
+      });
+    });
+  }
+
+  function restoreReplayHistoryEntries(entries, options) {
+    entries = entries || [];
+    options = options || {};
+    if (!entries.length) return;
+    var ids = {};
+    entries.forEach(function(entry) { if (entry && entry.item && entry.item.id) ids[entry.item.id] = true; });
+    replayHistory = replayHistory.filter(function(item) { return !ids[item.id]; });
+    replayHistory = insertManyAtOriginalPositions(replayHistory, entries);
+    replayGroups = uniqueReplayGroups([DEFAULT_REPLAY_GROUP].concat(replayGroups).concat(replayGroupsFromHistory(replayHistory)));
+    if (options.group) activeReplayGroup = normalizeReplayGroup(options.group);
+    selectedReplayHistoryIds = {};
+    persistReplayGroups();
+    persistReplayHistory();
+    syncReplayGroupInput();
+    renderReplayGroupDropdown();
+    renderReplayHistory();
+    if (options.focusId) applyReplayHistoryItem(options.focusId);
+    else loadFirstVisibleReplayHistory();
+  }
+
   function showAppDialog(options) {
     options = options || {};
     return new Promise(function(resolve) {
@@ -6354,12 +7013,14 @@
   loadCookieEntries();
   loadReplayHistory();
   loadCapturedMockRequests();
+  loadQrText();
   restorePanelSplit();
   restoreReplaySplit();
   renderBeaconTab();
   renderCookiesTab();
   renderReplayBodyEditor({ forceRows: true });
   renderReplayHistory();
+  renderQrTab();
   renderNetworkList(); // Render network tab (empty initially)
   updateBadge();
 })();

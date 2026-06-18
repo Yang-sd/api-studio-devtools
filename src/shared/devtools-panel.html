@@ -23,6 +23,7 @@
       <button class="tab" data-tab="mock">Mock <span class="tab-hit-badge" id="totalHitsCount"></span><span class="tab-status-dot" id="mockTabStatusDot" title="Mock 总开关已启用" data-i18n-title="status.mockOn"></span></button>
       <button class="tab" data-tab="beacon">Beacon <span class="tab-hit-badge" id="beaconCountBadge"></span></button>
       <button class="tab" data-tab="cookies">Cookies</button>
+      <button class="tab" data-tab="qr" data-i18n="tab.qr">QR</button>
     </div>
   </div>
 
@@ -426,6 +427,45 @@
     </div>
   </div>
 
+  <!-- ============ QR Tab ============ -->
+  <div class="tab-content" id="tabQr">
+    <div class="qr-shell">
+      <section class="qr-card qr-input-card">
+        <div class="qr-card-head">
+          <div>
+            <h3 data-i18n="qr.title">二维码生成</h3>
+            <p data-i18n="qr.subtitle">输入网址、文本、Deep Link 或口令，插件会在本地生成二维码。</p>
+          </div>
+          <span class="badge" id="qrMeta">0 / 2953 bytes</span>
+        </div>
+        <label class="form-label" for="qrInput" data-i18n="qr.content">内容</label>
+        <textarea class="form-textarea qr-textarea" id="qrInput" rows="4" placeholder="https://example.com" data-i18n-placeholder="qr.placeholder"></textarea>
+        <div class="qr-actions">
+          <button class="btn btn-secondary" id="qrUseSelectedUrlBtn" type="button" data-i18n="qr.useSelectedUrl">使用当前请求 URL</button>
+          <button class="btn btn-secondary" id="qrClearBtn" type="button" data-i18n="common.clear">清空</button>
+        </div>
+        <div class="qr-status" id="qrStatus" data-i18n="qr.emptyHint">输入内容后会自动生成二维码。</div>
+      </section>
+
+      <section class="qr-card qr-preview-card">
+        <div class="qr-card-head qr-preview-head">
+          <div>
+            <h3 data-i18n="qr.preview">扫码预览</h3>
+            <p data-i18n="qr.privacy">本地生成，不会把内容发送到第三方接口。</p>
+          </div>
+          <div class="qr-actions qr-preview-actions">
+            <button class="btn btn-secondary" id="qrCopyBtn" type="button" data-i18n="qr.copyPng">复制 PNG</button>
+            <button class="btn btn-primary" id="qrDownloadBtn" type="button" data-i18n="qr.downloadPng">下载 PNG</button>
+          </div>
+        </div>
+        <div class="qr-canvas-wrap">
+          <canvas id="qrCanvas" width="320" height="320" aria-label="QR Code"></canvas>
+          <div class="qr-empty" id="qrEmpty" data-i18n="qr.emptyPreview">等待输入内容</div>
+        </div>
+      </section>
+    </div>
+  </div>
+
   <!-- Context Menu -->
   <div id="contextMenu">
     <div class="ctx-item"><span class="ctx-icon">✦</span> <span data-i18n="mock.importTo">导入到 Mock</span></div>
@@ -439,20 +479,6 @@
     <button class="import-menu-item" data-import-target="mock" data-i18n="mock.import">导入 Mock</button>
     <button class="import-menu-item" data-import-target="beacon" data-i18n="beacon.import">导入 Beacon</button>
     <button class="import-menu-item" data-import-target="cookies" data-i18n="cookies.import">导入 Cookies</button>
-  </div>
-
-  <div class="modal-overlay" id="configModalOverlay">
-    <div class="modal config-modal">
-      <div class="modal-header">
-        <h3 id="configModalTitle" data-i18n="config.new">新建配置</h3>
-        <button class="btn-icon" id="configModalCloseBtn">✕</button>
-      </div>
-      <div class="modal-body" id="configModalBody"></div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" id="configModalCancelBtn" data-i18n="common.cancel">取消</button>
-        <button class="btn btn-primary" id="configModalSaveBtn" data-i18n="common.save">保存</button>
-      </div>
-    </div>
   </div>
 
   <!-- Modal (shared) -->
@@ -495,6 +521,7 @@
 </div>
 
 <script src="compat.js"></script>
+<script src="qr-code.js"></script>
 <script src="devtools-panel.js"></script>
 </body>
 </html>

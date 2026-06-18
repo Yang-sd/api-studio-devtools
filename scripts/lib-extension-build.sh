@@ -22,6 +22,7 @@ copy_shared_files() {
   cp "$SHARED_DIR"/devtools-panel.html "$out_dir"/
   cp "$SHARED_DIR"/devtools-panel.css "$out_dir"/
   cp "$SHARED_DIR"/devtools-panel.js "$out_dir"/
+  cp "$SHARED_DIR"/qr-code.js "$out_dir"/
   cp "$SHARED_DIR"/inject.js "$out_dir"/
 }
 

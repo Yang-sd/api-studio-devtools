@@ -8,7 +8,7 @@ API Studio DevTools 是一个浏览器 DevTools 扩展，用来做 API 抓包、
 - **Replay / 重放**：保存请求、分组管理、重命名并从 DevTools 面板重新发送。
 - **请求体编辑**：支持 raw JSON/text、`application/x-www-form-urlencoded`、`multipart/form-data` 和文件上传。
 - **Mock / 规则模拟**：从真实请求导入 Mock 规则，支持全局开关和分组管理。
-- **Beacon / 埋点**：分析上报请求，支持嵌套字段、数组和重复 key 匹配。
+- **Beacon / 埋点**：分析上报请求，支持多层 URL 编码、`$` 分隔载荷、嵌套 JSON、数组和重复 key 匹配。
 - **Cookies / Cookie**：收集请求 Cookie 和响应 `Set-Cookie`，便于调试登录态和会话问题。
 - **Theme / 主题**：支持自动、浅色、深色主题切换，自动模式跟随系统主题。
 
@@ -101,6 +101,12 @@ chrome-extension/api-studio-devtools-chrome.zip
 ```
 
 该测试站是独立项目，不会进入 Chrome Web Store 上传包。
+
+## Beacon 埋点解析
+
+Beacon 面板会把常见生产上报格式先解析成更容易阅读的 JSON：外层 query/body 会按表单参数解析，字段值会做多层 URL decode，类似 `v=je=0$sc=24-bit$p0=...` 的 `$` 分隔载荷会继续展开，`p0` 这种二次编码 JSON 会还原成对象。URL 字段会保留为字符串，避免把链接里的 query 参数误拆成业务对象。
+
+这里处理的是浏览器上报里常见的“编码/转义”格式，不是 AES/RSA 这类真正加密。如果生产埋点使用了真实加密算法，还需要提供算法和密钥来源，扩展才能进一步解密。
 
 ## 权限说明
 
