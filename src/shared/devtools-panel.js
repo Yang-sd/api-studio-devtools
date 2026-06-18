@@ -204,6 +204,7 @@
   var cookieEntries = [];
   var selectedCookieEntryId = null;
   var importMenuReqId = '';
+  var QR_CANVAS_SIZE = 512;
   var beaconConfig = {
     path: '',
     conditions: [],
@@ -5985,8 +5986,8 @@
   function drawQrPlaceholder() {
     if (!qrCanvas) return;
     var ctx = qrCanvas.getContext('2d');
-    qrCanvas.width = 320;
-    qrCanvas.height = 320;
+    qrCanvas.width = QR_CANVAS_SIZE;
+    qrCanvas.height = QR_CANVAS_SIZE;
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, qrCanvas.width, qrCanvas.height);
     qrCanvas.classList.add('is-empty');
@@ -5997,8 +5998,8 @@
     if (!canvas || !modules || !modules.length) return;
     var size = modules.length;
     var quiet = 4;
-    var width = 320;
-    var height = 320;
+    var width = QR_CANVAS_SIZE;
+    var height = QR_CANVAS_SIZE;
     canvas.width = width;
     canvas.height = height;
     canvas.classList.remove('is-empty');

@@ -374,15 +374,15 @@ body{font-family:var(--font);font-size:12px;color:var(--text);background:var(--b
 .qr-preview-card{display:flex;flex-direction:column;min-height:0}
 .qr-preview-head{align-items:flex-start}
 .qr-preview-actions{justify-content:flex-end;margin-top:0;flex-shrink:0}
-.qr-canvas-wrap{position:relative;display:flex;align-items:center;justify-content:center;flex:1;min-height:300px;padding:16px;border:1px dashed var(--border);border-radius:12px;background:var(--surface-soft);overflow:hidden}
-#qrCanvas{display:block;width:min(260px,100%);height:auto;aspect-ratio:1;border-radius:8px;background:#fff;box-shadow:0 14px 32px rgba(15,23,42,.12)}
+.qr-canvas-wrap{position:relative;display:flex;align-items:center;justify-content:center;flex:1;min-height:420px;padding:18px;border:1px dashed var(--border);border-radius:12px;background:var(--surface-soft);overflow:hidden}
+#qrCanvas{display:block;width:min(420px,100%);height:auto;aspect-ratio:1;border-radius:8px;background:#fff;box-shadow:0 14px 32px rgba(15,23,42,.12)}
 #qrCanvas.is-empty{opacity:.18}
 .qr-empty{position:absolute;inset:auto;display:none;padding:8px 12px;border-radius:999px;background:var(--surface);border:1px solid var(--border-light);color:var(--text-muted);font-size:12px;box-shadow:0 8px 24px rgba(15,23,42,.08)}
 .qr-empty.show{display:block}
 :root[data-theme="dark"] .qr-card{box-shadow:none}
 :root[data-theme="dark"] .qr-canvas-wrap{background:#151b28;border-color:#30394c}
 :root[data-theme="dark"] #qrCanvas{box-shadow:0 16px 36px rgba(0,0,0,.42)}
-@media (max-width:980px){.qr-shell{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);align-content:stretch}.qr-input-card{align-self:start}.qr-preview-card{min-height:0}.qr-preview-actions{justify-content:flex-start}.qr-textarea{min-height:88px;max-height:140px}.qr-canvas-wrap{min-height:280px}#qrCanvas{width:min(240px,100%)}}
+@media (max-width:980px){.qr-shell{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);align-content:stretch}.qr-input-card{align-self:start}.qr-preview-card{min-height:0}.qr-preview-actions{justify-content:flex-start}.qr-textarea{min-height:88px;max-height:140px}.qr-canvas-wrap{min-height:520px}#qrCanvas{width:min(420px,92%)}}
 .find-match{background:var(--find-bg);border-radius:2px}
 .find-active{background:var(--find-active);border-radius:2px}
 .find-active-row{outline:1px solid var(--find-active);outline-offset:-1px}
