@@ -3,6 +3,6 @@
     "message": "API Studio - 接口请求模拟器"
   },
   "extensionDescription": {
-    "message": "在 DevTools 中记录、重放、模拟和调试 API 请求"
+    "message": "在 DevTools 中调试 API 请求并生成稳定的 Selenium 元素定位"
   }
 }

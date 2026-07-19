@@ -1,61 +1,245 @@
 (function() {
   'use strict';
 
-  const INJECT_VERSION = '2026-06-17-mock-only-v1';
+  const INJECT_VERSION = '2026-06-22-mock-fast-path-v3';
   if (window.__API_STUDIO_MOCK_INJECTED_VERSION__ === INJECT_VERSION) return;
   window.__API_STUDIO_MOCK_INJECTED__ = true;
   window.__API_STUDIO_MOCK_INJECTED_VERSION__ = INJECT_VERSION;
 
-  // inject.js 运行在页面上下文，只通过 postMessage 向 content script 查询本地规则。
-  // ====== 消息通信 ======
+  // inject.js 运行在页面上下文；只有 Mock 激活时才临时挂钩 fetch/XHR。
+  let mockActive = false;
+  let ruleIndex = [];
   let requestIdCounter = 0;
   const pendingRequests = new Map();
 
-  function queryRule(url, method, body) {
-    return new Promise((resolve) => {
-      const requestId = 'req_' + (++requestIdCounter) + '_' + Date.now();
-      pendingRequests.set(requestId, resolve);
-      window.postMessage({
-        type: '__MOCK_EXT_CHECK__',
-        requestId: requestId,
-        url: normalizeUrl(url),
-        method: method,
-        body: body || ''
-      }, '*');
-      setTimeout(() => {
-        if (pendingRequests.has(requestId)) {
-          pendingRequests.delete(requestId);
-          resolve({ rule: null });
-        }
-      }, 3000);
-    });
-  }
+  let hooksInstalled = false;
+  let originalFetch = null;
+  let XHR = null;
+  let origOpen = null;
+  let origSend = null;
+  let origSetRH = null;
 
   window.addEventListener('message', function(event) {
-    if (event.data && event.data.type === '__MOCK_EXT_RESULT__') {
-      const resolve = pendingRequests.get(event.data.requestId);
-      if (resolve) {
+    if (event.source !== window || !event.data) return;
+    if (event.data.type === '__MOCK_EXT_STATE__') {
+      applyMockState(event.data.active, event.data.rules);
+      return;
+    }
+    if (event.data.type === '__MOCK_EXT_RESULT__') {
+      const pending = pendingRequests.get(event.data.requestId);
+      if (pending) {
+        clearTimeout(pending.timer);
         pendingRequests.delete(event.data.requestId);
-        resolve({ rule: event.data.rule || null });
+        pending.resolve({ rule: event.data.rule || null });
       }
     }
   });
 
-  function delay(ms) {
-    return new Promise(r => setTimeout(r, ms));
+  window.postMessage({
+    type: '__MOCK_EXT_READY__',
+    version: INJECT_VERSION
+  }, '*');
+
+  function applyMockState(active, rules) {
+    ruleIndex = normalizeRuleIndex(rules);
+    mockActive = !!active && ruleIndex.length > 0;
+    if (mockActive) {
+      installHooks();
+      return;
+    }
+    resolvePendingAsPassThrough();
+    uninstallHooks();
   }
 
-  // ====== 拦截 fetch ======
-  // 这里不读取扩展存储，避免页面上下文直接依赖浏览器扩展 API。
-  const originalFetch = window.fetch.bind(window);
-  window.fetch = async function(input, init) {
+  function normalizeRuleIndex(rules) {
+    return (rules || []).map(function(rule) {
+      const urlRule = rule && rule.url ? rule.url : {};
+      const matchType = urlRule.matchType || 'contains';
+      const pattern = String(urlRule.pattern || '');
+      return {
+        method: String(rule && rule.method ? rule.method : 'ANY').toUpperCase(),
+        pattern: pattern,
+        matchType: matchType,
+        regex: matchType === 'regex' ? safeRegExp(pattern) : null
+      };
+    }).filter(function(rule) {
+      return rule.pattern;
+    });
+  }
+
+  function installHooks() {
+    if (hooksInstalled) return;
+
+    let installed = false;
+    if (typeof window.fetch === 'function') {
+      originalFetch = window.fetch;
+      window.fetch = mockFetch;
+      installed = true;
+    }
+
+    XHR = window.XMLHttpRequest;
+    if (XHR && XHR.prototype) {
+      origOpen = XHR.prototype.open;
+      origSend = XHR.prototype.send;
+      origSetRH = XHR.prototype.setRequestHeader;
+      XHR.prototype.open = mockXhrOpen;
+      XHR.prototype.send = mockXhrSend;
+      XHR.prototype.setRequestHeader = mockXhrSetRequestHeader;
+      installed = true;
+    }
+
+    hooksInstalled = installed;
+  }
+
+  function uninstallHooks() {
+    if (!hooksInstalled) return;
+
+    if (originalFetch && window.fetch === mockFetch) {
+      window.fetch = originalFetch;
+    }
+    if (XHR && XHR.prototype) {
+      if (origOpen && XHR.prototype.open === mockXhrOpen) XHR.prototype.open = origOpen;
+      if (origSend && XHR.prototype.send === mockXhrSend) XHR.prototype.send = origSend;
+      if (origSetRH && XHR.prototype.setRequestHeader === mockXhrSetRequestHeader) {
+        XHR.prototype.setRequestHeader = origSetRH;
+      }
+    }
+
+    hooksInstalled = false;
+    originalFetch = null;
+    XHR = null;
+    origOpen = null;
+    origSend = null;
+    origSetRH = null;
+  }
+
+  function resolvePendingAsPassThrough() {
+    pendingRequests.forEach(function(pending) {
+      clearTimeout(pending.timer);
+      pending.resolve({ rule: null });
+    });
+    pendingRequests.clear();
+  }
+
+  function queryRule(url, method, body) {
+    return new Promise(function(resolve) {
+      if (!mockActive) {
+        resolve({ rule: null });
+        return;
+      }
+
+      const requestId = 'req_' + (++requestIdCounter) + '_' + Date.now();
+      const timer = setTimeout(function() {
+        const pending = pendingRequests.get(requestId);
+        if (pending) {
+          pendingRequests.delete(requestId);
+          pending.resolve({ rule: null });
+        }
+      }, 500);
+
+      pendingRequests.set(requestId, { resolve: resolve, timer: timer });
+      try {
+        window.postMessage({
+          type: '__MOCK_EXT_CHECK__',
+          requestId: requestId,
+          url: normalizeUrl(url),
+          method: method,
+          body: body || ''
+        }, '*');
+      } catch (e) {
+        clearTimeout(timer);
+        pendingRequests.delete(requestId);
+        resolve({ rule: null });
+      }
+    });
+  }
+
+  function normalizeUrl(url) {
+    try {
+      return new URL(String(url || ''), window.location.href).href;
+    } catch (e) {
+      return String(url || '');
+    }
+  }
+
+  function isAbsoluteHttpUrl(value) {
+    return /^https?:\/\//i.test(String(value || ''));
+  }
+
+  function getUrlCandidates(value, options) {
+    options = options || {};
+    const raw = String(value || '');
+    const candidates = [raw];
+    try {
+      const u = new URL(raw, window.location.href);
+      candidates.push(u.href);
+      candidates.push(u.origin + u.pathname + u.search);
+      if (options.includePath !== false) candidates.push(u.pathname + u.search);
+    } catch (e) {}
+    return Array.from(new Set(candidates.filter(Boolean)));
+  }
+
+  function safeRegExp(pattern) {
+    try {
+      return new RegExp(pattern);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function matchUrlValue(url, rule) {
+    switch (rule.matchType) {
+      case 'contains': return url.includes(rule.pattern);
+      case 'equals': return url === rule.pattern;
+      case 'startsWith': return url.startsWith(rule.pattern);
+      case 'regex': return !!rule.regex && rule.regex.test(url);
+      default: return url.includes(rule.pattern);
+    }
+  }
+
+  function shouldQueryMock(url, method) {
+    if (!mockActive || ruleIndex.length === 0) return false;
+    method = String(method || 'GET').toUpperCase();
+    const urls = getUrlCandidates(url);
+    return ruleIndex.some(function(rule) {
+      if (rule.method !== 'ANY' && rule.method !== method) return false;
+      if (rule.matchType === 'regex') {
+        return urls.some(function(candidate) {
+          return matchUrlValue(candidate, rule);
+        });
+      }
+      const patterns = getUrlCandidates(rule.pattern, { includePath: !isAbsoluteHttpUrl(rule.pattern) });
+      return urls.some(function(candidate) {
+        return patterns.some(function(pattern) {
+          return matchUrlValue(candidate, Object.assign({}, rule, { pattern: pattern }));
+        });
+      });
+    });
+  }
+
+  function delay(ms) {
+    return new Promise(function(resolve) {
+      setTimeout(resolve, ms);
+    });
+  }
+
+  function getCheapBodyText(body) {
+    if (typeof body === 'string') return body;
+    if (typeof URLSearchParams !== 'undefined' && body instanceof URLSearchParams) return body.toString();
+    return '';
+  }
+
+  async function mockFetch(input, init) {
+    if (!originalFetch) throw new TypeError('fetch is not available');
+    if (!mockActive) return originalFetch.apply(window, arguments);
+
     let url = '';
     let method = 'GET';
     let bodyText = '';
 
     if (typeof input === 'string') {
       url = input;
-    } else if (input instanceof Request) {
+    } else if (typeof Request !== 'undefined' && input instanceof Request) {
       url = input.url;
       method = input.method || 'GET';
     } else if (input && typeof input === 'object') {
@@ -63,28 +247,21 @@
     }
 
     if (init) {
-      if (init.method) method = init.method.toUpperCase();
-      if (init.body) {
-        bodyText = (typeof init.body === 'string') ? init.body
-          : (init.body instanceof URLSearchParams) ? init.body.toString()
-          : (init.body instanceof Blob) ? await init.body.text()
-          : '';
-      }
-    } else if (input instanceof Request) {
-      try {
-        if (input.body) {
-          const cloned = input.clone();
-          bodyText = await cloned.text();
-        }
-      } catch(e) {}
+      if (init.method) method = String(init.method).toUpperCase();
     }
+
+    if (!shouldQueryMock(url, method)) return originalFetch.apply(window, arguments);
+    if (init && init.body) bodyText = getCheapBodyText(init.body);
 
     let result;
     try {
       result = await queryRule(url, method, bodyText);
     } catch (e) {
-      return originalFetch.call(window, input, init);
+      return originalFetch.apply(window, arguments);
     }
+
+    if (!mockActive) return originalFetch.apply(window, arguments);
+
     const rule = result && result.rule;
     if (rule) {
       const response = rule.response || {};
@@ -92,40 +269,33 @@
       return new Response(response.body || '', {
         status: response.statusCode || 200,
         statusText: 'OK',
-        headers: new Headers(response.headers || {'Content-Type': 'application/json'})
+        headers: new Headers(response.headers || { 'Content-Type': 'application/json' })
       });
     }
-    return originalFetch.call(window, input, init);
-  };
+    return originalFetch.apply(window, arguments);
+  }
 
-  // ====== 拦截 XMLHttpRequest ======
-  const XHR = XMLHttpRequest;
-  const origOpen = XHR.prototype.open;
-  const origSend = XHR.prototype.send;
-  const origSetRH = XHR.prototype.setRequestHeader;
-
-  XHR.prototype.open = function(method, url, async, user, password) {
-    this.__method = (method || 'GET').toUpperCase();
-    this.__url = (typeof url === 'string') ? url : String(url || '');
-    this.__async = (async !== false);
+  function mockXhrOpen(method, url, async, user, password) {
+    this.__method = String(method || 'GET').toUpperCase();
+    this.__url = typeof url === 'string' ? url : String(url || '');
+    this.__async = async !== false;
     this.__headers = {};
     this.__body = null;
     return origOpen.apply(this, arguments);
-  };
+  }
 
-  XHR.prototype.setRequestHeader = function(name, value) {
+  function mockXhrSetRequestHeader(name, value) {
     if (this.__headers) this.__headers[name] = value;
     return origSetRH.apply(this, arguments);
-  };
+  }
 
-  XHR.prototype.send = async function(body) {
+  async function mockXhrSend(body) {
+    if (!origSend) return;
+    if (!mockActive) return origSend.apply(this, arguments);
+
     this.__body = body || '';
-    let bodyText = '';
-    if (typeof body === 'string') bodyText = body;
-    else if (body instanceof URLSearchParams) bodyText = body.toString();
-    else if (body instanceof Blob || body instanceof ArrayBuffer) bodyText = '';
-    else if (body instanceof Document) bodyText = '';
-    else if (body !== null && body !== undefined) bodyText = String(body);
+    if (!shouldQueryMock(this.__url, this.__method)) return origSend.apply(this, arguments);
+    const bodyText = getCheapBodyText(body);
 
     let result;
     try {
@@ -133,6 +303,9 @@
     } catch (e) {
       return origSend.apply(this, arguments);
     }
+
+    if (!mockActive) return origSend.apply(this, arguments);
+
     const rule = result && result.rule;
     if (rule) {
       const response = rule.response || {};
@@ -140,7 +313,6 @@
 
       const statusCode = response.statusCode || 200;
       const responseBody = response.body || '';
-      const respHeaders = response.headers || {'Content-Type': 'application/json'};
       const xhr = this;
       try {
         Object.defineProperties(xhr, {
@@ -164,5 +336,5 @@
     }
 
     return origSend.apply(this, arguments);
-  };
+  }
 })();

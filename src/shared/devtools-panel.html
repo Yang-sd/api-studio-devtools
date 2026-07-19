@@ -23,6 +23,7 @@
       <button class="tab" data-tab="mock">Mock <span class="tab-hit-badge" id="totalHitsCount"></span><span class="tab-status-dot" id="mockTabStatusDot" title="Mock 总开关已启用" data-i18n-title="status.mockOn"></span></button>
       <button class="tab" data-tab="beacon">Beacon <span class="tab-hit-badge" id="beaconCountBadge"></span></button>
       <button class="tab" data-tab="cookies">Cookies</button>
+      <button class="tab" data-tab="locator" data-i18n="tab.locator">Locator</button>
       <button class="tab" data-tab="qr" data-i18n="tab.qr">QR</button>
     </div>
   </div>
@@ -66,10 +67,19 @@
   <div class="tab-content active" id="tabNetwork">
     <div class="toolbar">
       <div class="toolbar-left">
+        <button class="btn btn-sm capture-toggle" id="captureToggleBtn" type="button" aria-pressed="true" title="暂停抓包">
+          <span class="capture-indicator" aria-hidden="true"></span>
+          <span id="captureToggleText">暂停抓包</span>
+        </button>
         <span class="badge" id="countBadge">0 个请求</span>
         <input class="net-search" id="networkSearchInput" type="text" placeholder="过滤路径..." data-i18n-placeholder="network.filterPath" autocomplete="off">
       </div>
       <div class="toolbar-right">
+        <label class="capture-scope-label" for="captureScopeSelect" data-i18n="network.captureScopeLabel">捕获</label>
+        <select class="capture-scope" id="captureScopeSelect" title="选择需要捕获的资源范围">
+          <option value="api">API / Beacon</option>
+          <option value="all">全部资源</option>
+        </select>
         <button class="btn btn-sm" id="clearBtn" data-i18n="common.clear">清空</button>
       </div>
     </div>
@@ -422,6 +432,49 @@
               </div>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ Locator Tab ============ -->
+  <div class="tab-content" id="tabLocator">
+    <div class="locator-shell">
+      <div class="locator-toolbar">
+        <div class="locator-toolbar-left">
+          <button class="btn btn-primary locator-pick-btn" id="locatorPickBtn" type="button">
+            <span class="locator-pick-icon" aria-hidden="true">⌖</span>
+            <span id="locatorPickText" data-i18n="locator.start">拾取元素</span>
+          </button>
+          <span class="locator-status-dot" id="locatorStatusDot" aria-hidden="true"></span>
+          <span class="locator-status" id="locatorStatus" data-i18n="locator.ready">点击拾取后，到页面中选择输入框、按钮或其他元素。</span>
+        </div>
+        <div class="locator-toolbar-right">
+          <label class="locator-continuous" title="开启后可连续选择多个元素" data-i18n-title="locator.continuousTitle">
+            <input type="checkbox" id="locatorContinuous">
+            <span data-i18n="locator.continuous">连续拾取</span>
+          </label>
+          <button class="btn btn-sm" id="locatorClearBtn" type="button" data-i18n="common.clear">清空</button>
+        </div>
+      </div>
+      <div class="locator-note" data-i18n="locator.policy">只生成经过唯一性验证的稳定定位；不会生成 nth-child、绝对数字 XPath 或屏幕坐标。</div>
+      <div class="locator-table-scroll">
+        <table class="locator-table">
+          <thead>
+            <tr>
+              <th class="locator-col-element" data-i18n="locator.element">元素</th>
+              <th class="locator-col-recommended" data-i18n="locator.recommended">推荐定位</th>
+              <th class="locator-col-css">CSS</th>
+              <th class="locator-col-xpath">XPath</th>
+              <th class="locator-col-context" data-i18n="locator.context">上下文</th>
+              <th class="locator-col-actions" data-i18n="locator.actions">操作</th>
+            </tr>
+          </thead>
+          <tbody id="locatorTableBody"></tbody>
+        </table>
+        <div class="empty-state locator-empty" id="locatorEmpty">
+          <p data-i18n="locator.emptyTitle">还没有拾取元素</p>
+          <p class="hint" data-i18n="locator.emptyHint">点击“拾取元素”，然后在被调试页面中点击目标控件。</p>
         </div>
       </div>
     </div>

@@ -92,6 +92,33 @@
     });
   }
 
+  function sendTabMessage(tabId, message, options) {
+    return new Promise(function(resolve, reject) {
+      if (!runtimeApi || !runtimeApi.tabs || !runtimeApi.tabs.sendMessage) {
+        reject(new Error('当前浏览器不支持向页面发送消息'));
+        return;
+      }
+
+      try {
+        var maybePromise;
+        if (runtimeApi === global.browser) {
+          maybePromise = runtimeApi.tabs.sendMessage(tabId, message, options || {});
+        } else {
+          maybePromise = runtimeApi.tabs.sendMessage(tabId, message, options || {}, function(response) {
+            var err = lastError();
+            if (err) reject(new Error(err.message));
+            else resolve(response);
+          });
+        }
+        if (maybePromise && typeof maybePromise.then === 'function') {
+          maybePromise.then(resolve).catch(reject);
+        }
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
   function getURL(path) {
     if (!runtimeApi || !runtimeApi.runtime || !runtimeApi.runtime.getURL) return path;
     return runtimeApi.runtime.getURL(path);
@@ -136,6 +163,7 @@
     storageGet: storageGet,
     storageSet: storageSet,
     sendMessage: sendMessage,
+    sendTabMessage: sendTabMessage,
     getURL: getURL,
     addStorageChangedListener: addStorageChangedListener,
     copyText: copyText

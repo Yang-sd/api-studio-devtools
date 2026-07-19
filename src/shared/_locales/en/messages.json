@@ -3,6 +3,6 @@
     "message": "API Studio - API Request Toolkit"
   },
   "extensionDescription": {
-    "message": "Capture, replay, mock, and debug API requests in DevTools."
+    "message": "Debug API requests and generate stable Selenium element locators in DevTools."
   }
 }

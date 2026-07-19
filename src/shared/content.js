@@ -5,6 +5,18 @@
   let cacheReady = false;
   let masterEnabled = true;
   const extensionApi = ApiStudioCompat.api || chrome;
+  const usesManifestMainWorld = typeof chrome !== 'undefined' && typeof browser === 'undefined';
+  let domInjectLoaded = false;
+  let domInjecting = false;
+  let pendingStatePublish = false;
+  let locatorActive = false;
+  let locatorContinuous = false;
+  let locatorSessionId = '';
+  let locatorTarget = null;
+  let locatorOverlay = null;
+  let locatorLabel = null;
+  let locatorStyle = null;
+  let locatorPreviousCursor = '';
 
   // content script 负责桥接页面上下文和扩展存储；真正改写 fetch/XHR 的逻辑在 inject.js。
 
@@ -63,12 +75,13 @@
   }
 
   function findRule(url, method, body) {
-    method = method.toUpperCase();
+    method = String(method || 'GET').toUpperCase();
     let bestRule = null;
     let bestScore = -1;
     for (const rule of ruleCache) {
-      if (!rule.enabled) continue;
-      if (rule.method !== 'ANY' && rule.method !== method) continue;
+      if (!rule || !rule.enabled || !rule.url) continue;
+      const ruleMethod = String(rule.method || 'ANY').toUpperCase();
+      if (ruleMethod !== 'ANY' && ruleMethod !== method) continue;
       if (!matchUrl(url, rule.url.pattern, rule.url.matchType)) continue;
       const score = getRuleScore(rule);
       if (score > bestScore) {
@@ -90,24 +103,50 @@
       masterEnabled = true;
       cacheReady = true;
     }
+    syncMockBridge();
   }
 
-  extensionApi.runtime.onMessage.addListener((message) => {
+  extensionApi.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === '__MOCK_REFRESH_RULES__') loadState();
+    if (message.type === '__API_STUDIO_LOCATOR_START__') {
+      startLocatorPicker(message.sessionId, message.continuous);
+      if (sendResponse) sendResponse({ success: true, frameUrl: window.location.href });
+      return false;
+    }
+    if (message.type === '__API_STUDIO_LOCATOR_STOP__') {
+      stopLocatorPicker();
+      if (sendResponse) sendResponse({ success: true });
+      return false;
+    }
   });
 
   ApiStudioCompat.addStorageChangedListener((changes) => {
-    if (changes.rules) ruleCache = changes.rules.newValue || [];
-    if (changes.masterEnabled !== undefined) masterEnabled = changes.masterEnabled.newValue !== false;
+    let changed = false;
+    if (changes.rules) {
+      ruleCache = changes.rules.newValue || [];
+      cacheReady = true;
+      changed = true;
+    }
+    if (changes.masterEnabled !== undefined) {
+      masterEnabled = changes.masterEnabled.newValue !== false;
+      cacheReady = true;
+      changed = true;
+    }
+    if (changed) syncMockBridge();
   });
 
   window.addEventListener('message', async function(event) {
+    if (event.source !== window) return;
+    if (event.data && event.data.type === '__MOCK_EXT_READY__') {
+      if (!cacheReady) await loadState();
+      else syncMockBridge();
+      return;
+    }
     if (event.data && event.data.type === '__MOCK_EXT_CHECK__') {
       const { requestId, url, method, body } = event.data;
       if (!cacheReady) await loadState();
-      const matched = masterEnabled ? findRule(url, method, body) : null;
+      const matched = isMockActive() ? findRule(url, method, body) : null;
       if (matched) {
-        incrementHitCount(matched.id).catch(function(){});
         try {
           var mockResponse = matched.response || {};
           var mockId = 'mock_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
@@ -124,11 +163,11 @@
             mocked: true,
             headers: {},
             resHeaders: JSON.parse(JSON.stringify(mockHdrs)),
-            postData: body || '',
-            responseContent: mockResponse.body || '',
+            postData: limitBridgeText(body, 256 * 1024),
+            responseContent: limitBridgeText(mockResponse.body, 256 * 1024),
             imported: false
           };
-          ApiStudioCompat.sendMessage({ type: 'RECORD_MOCK', data: mockEntry });
+          ApiStudioCompat.sendMessage({ type: 'RECORD_MOCK', data: mockEntry, ruleId: matched.id });
         } catch (e) {}
       }
       window.postMessage({
@@ -139,34 +178,299 @@
     }
   });
 
-  async function incrementHitCount(ruleId) {
-    const result = await ApiStudioCompat.storageGet('ruleHits');
-    const hits = result.ruleHits || {};
-    hits[ruleId] = (hits[ruleId] || 0) + 1;
-    await ApiStudioCompat.storageSet({ ruleHits: hits });
+  function limitBridgeText(value, maxChars) {
+    const text = String(value || '');
+    return text.length > maxChars ? text.slice(0, maxChars) : text;
+  }
+
+  // Locator 只在用户主动拾取时安装事件监听，完成或取消后立即释放。
+  function startLocatorPicker(sessionId, continuous) {
+    stopLocatorPicker();
+    locatorActive = true;
+    locatorContinuous = !!continuous;
+    locatorSessionId = String(sessionId || '');
+    locatorPreviousCursor = document.documentElement ? document.documentElement.style.cursor : '';
+    ensureLocatorOverlay();
+    document.addEventListener('pointermove', onLocatorPointerMove, true);
+    document.addEventListener('mousedown', suppressLocatorPointerEvent, true);
+    document.addEventListener('mouseup', suppressLocatorPointerEvent, true);
+    document.addEventListener('click', onLocatorClick, true);
+    document.addEventListener('keydown', onLocatorKeyDown, true);
+    window.addEventListener('scroll', refreshLocatorOverlay, true);
+    window.addEventListener('resize', refreshLocatorOverlay, true);
+    if (document.documentElement) document.documentElement.setAttribute('data-api-studio-locator-active', 'true');
+  }
+
+  function stopLocatorPicker() {
+    var hadLocatorState = locatorActive || locatorOverlay || locatorLabel || locatorStyle;
+    if (locatorActive) {
+      document.removeEventListener('pointermove', onLocatorPointerMove, true);
+      document.removeEventListener('mousedown', suppressLocatorPointerEvent, true);
+      document.removeEventListener('mouseup', suppressLocatorPointerEvent, true);
+      document.removeEventListener('click', onLocatorClick, true);
+      document.removeEventListener('keydown', onLocatorKeyDown, true);
+      window.removeEventListener('scroll', refreshLocatorOverlay, true);
+      window.removeEventListener('resize', refreshLocatorOverlay, true);
+    }
+    locatorActive = false;
+    locatorContinuous = false;
+    locatorSessionId = '';
+    locatorTarget = null;
+    if (locatorOverlay) locatorOverlay.remove();
+    if (locatorLabel) locatorLabel.remove();
+    if (locatorStyle) locatorStyle.remove();
+    locatorOverlay = null;
+    locatorLabel = null;
+    locatorStyle = null;
+    if (document.documentElement && hadLocatorState) {
+      document.documentElement.removeAttribute('data-api-studio-locator-active');
+      document.documentElement.style.cursor = locatorPreviousCursor;
+    }
+    locatorPreviousCursor = '';
+  }
+
+  function ensureLocatorOverlay() {
+    if (locatorOverlay && locatorLabel) return;
+    var target = document.documentElement || document.body;
+    if (!target) return;
+
+    locatorOverlay = document.createElement('div');
+    locatorOverlay.setAttribute('data-api-studio-locator-ui', 'overlay');
+    locatorOverlay.style.cssText = [
+      'all:initial',
+      'position:fixed',
+      'display:none',
+      'pointer-events:none',
+      'z-index:2147483646',
+      'border:2px solid #4a90d9',
+      'background:rgba(74,144,217,.12)',
+      'box-sizing:border-box'
+    ].join(';');
+
+    locatorLabel = document.createElement('div');
+    locatorLabel.setAttribute('data-api-studio-locator-ui', 'label');
+    locatorLabel.style.cssText = [
+      'all:initial',
+      'position:fixed',
+      'display:none',
+      'max-width:360px',
+      'padding:5px 8px',
+      'border-radius:4px',
+      'background:#1f2937',
+      'color:#f9fafb',
+      'font:600 12px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
+      'white-space:nowrap',
+      'overflow:hidden',
+      'text-overflow:ellipsis',
+      'pointer-events:none',
+      'z-index:2147483647',
+      'box-shadow:0 4px 14px rgba(0,0,0,.22)'
+    ].join(';');
+
+    locatorStyle = document.createElement('style');
+    locatorStyle.setAttribute('data-api-studio-locator-ui', 'style');
+    locatorStyle.textContent = 'html[data-api-studio-locator-active],html[data-api-studio-locator-active] *{cursor:crosshair!important;}';
+
+    target.appendChild(locatorStyle);
+    target.appendChild(locatorOverlay);
+    target.appendChild(locatorLabel);
+  }
+
+  function onLocatorPointerMove(event) {
+    if (!locatorActive) return;
+    var target = locatorEventElement(event);
+    if (!target || isLocatorUi(target) || target === locatorTarget) return;
+    locatorTarget = target;
+    refreshLocatorOverlay();
+  }
+
+  function suppressLocatorPointerEvent(event) {
+    if (!locatorActive || isLocatorUi(locatorEventElement(event))) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+  }
+
+  function onLocatorClick(event) {
+    if (!locatorActive) return;
+    var target = locatorEventElement(event) || locatorTarget;
+    if (!target || isLocatorUi(target)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+
+    var sessionId = locatorSessionId;
+    var continuous = locatorContinuous;
+    try {
+      if (!globalThis.ApiStudioLocatorEngine) throw new Error('LOCATOR_ENGINE_MISSING');
+      var result = globalThis.ApiStudioLocatorEngine.inspect(target);
+      result.sessionId = sessionId;
+      result.continuous = continuous;
+      ApiStudioCompat.sendMessage({
+        type: '__API_STUDIO_LOCATOR_PICKED__',
+        sessionId: sessionId,
+        data: result
+      }).catch(function() {});
+    } catch (error) {
+      ApiStudioCompat.sendMessage({
+        type: '__API_STUDIO_LOCATOR_ERROR__',
+        sessionId: sessionId,
+        message: String(error && error.message || error)
+      }).catch(function() {});
+    }
+
+    if (!continuous) stopLocatorPicker();
+  }
+
+  function onLocatorKeyDown(event) {
+    if (!locatorActive || event.key !== 'Escape') return;
+    event.preventDefault();
+    event.stopPropagation();
+    var sessionId = locatorSessionId;
+    stopLocatorPicker();
+    ApiStudioCompat.sendMessage({
+      type: '__API_STUDIO_LOCATOR_CANCELLED__',
+      sessionId: sessionId
+    }).catch(function() {});
+  }
+
+  function refreshLocatorOverlay() {
+    if (!locatorActive || !locatorTarget) return;
+    ensureLocatorOverlay();
+    if (!locatorOverlay || !locatorLabel) return;
+    var rect;
+    try { rect = locatorTarget.getBoundingClientRect(); }
+    catch (error) { return; }
+    if (!rect || rect.width < 0 || rect.height < 0) return;
+
+    locatorOverlay.style.display = 'block';
+    locatorOverlay.style.left = Math.max(0, rect.left) + 'px';
+    locatorOverlay.style.top = Math.max(0, rect.top) + 'px';
+    locatorOverlay.style.width = Math.max(1, rect.width) + 'px';
+    locatorOverlay.style.height = Math.max(1, rect.height) + 'px';
+
+    locatorLabel.textContent = locatorElementPreview(locatorTarget);
+    locatorLabel.style.display = 'block';
+    locatorLabel.style.left = Math.max(4, Math.min(rect.left, window.innerWidth - 364)) + 'px';
+    locatorLabel.style.top = Math.max(4, rect.top >= 32 ? rect.top - 30 : rect.bottom + 6) + 'px';
+  }
+
+  function locatorEventElement(event) {
+    if (!event) return null;
+    if (typeof event.composedPath === 'function') {
+      var path = event.composedPath();
+      for (var i = 0; i < path.length; i++) {
+        if (path[i] && path[i].nodeType === 1) return path[i];
+      }
+    }
+    return event.target && event.target.nodeType === 1 ? event.target : null;
+  }
+
+  function isLocatorUi(element) {
+    return !!(element && element.getAttribute && element.getAttribute('data-api-studio-locator-ui'));
+  }
+
+  function locatorElementPreview(element) {
+    var tag = String(element && (element.localName || element.tagName) || '').toLowerCase();
+    var id = safeLocatorAttribute(element, 'id');
+    var name = safeLocatorAttribute(element, 'name');
+    var type = safeLocatorAttribute(element, 'type');
+    var label = safeLocatorAttribute(element, 'aria-label') || safeLocatorAttribute(element, 'placeholder');
+    var preview = '<' + tag + (id ? '#' + id : '') + (name ? '[name=' + name + ']' : '') + (type ? '[type=' + type + ']' : '') + '>';
+    return label ? preview + '  ' + label.slice(0, 80) : preview;
+  }
+
+  function safeLocatorAttribute(element, name) {
+    try { return String(element.getAttribute(name) || '').trim().slice(0, 80); }
+    catch (error) { return ''; }
+  }
+
+  window.addEventListener('pagehide', stopLocatorPicker);
+
+  function hasEnabledRules() {
+    return ruleCache.some(function(rule) {
+      return rule && rule.enabled;
+    });
+  }
+
+  function isMockActive() {
+    return masterEnabled && hasEnabledRules();
+  }
+
+  function publishMockState() {
+    const active = isMockActive();
+    window.postMessage({
+      type: '__MOCK_EXT_STATE__',
+      active: active,
+      rules: active ? buildRuleIndex() : []
+    }, '*');
+  }
+
+  function buildRuleIndex() {
+    return ruleCache.filter(function(rule) {
+      return rule && rule.enabled && rule.url;
+    }).map(function(rule) {
+      return {
+        method: String(rule.method || 'ANY').toUpperCase(),
+        url: {
+          pattern: String(rule.url.pattern || ''),
+          matchType: rule.url.matchType || 'contains'
+        }
+      };
+    });
+  }
+
+  function syncMockBridge() {
+    if (usesManifestMainWorld || !isMockActive()) {
+      publishMockState();
+      return;
+    }
+    injectScript();
   }
 
   function injectScript() {
-    // Chrome 可以通过 MAIN world 直接注入；Firefox 走 DOM script fallback，保持同一套业务逻辑。
+    // Chrome 通过 manifest 的 MAIN world 注入；Firefox 只有需要 Mock 时才走 DOM script fallback。
+    if (domInjectLoaded) {
+      publishMockState();
+      return;
+    }
+    if (domInjecting) {
+      pendingStatePublish = true;
+      return;
+    }
+    domInjecting = true;
     try {
-      if (window.__API_STUDIO_INJECT_FALLBACK_SCHEDULED__) return;
-      window.__API_STUDIO_INJECT_FALLBACK_SCHEDULED__ = true;
+      const target = document.documentElement || document.head || document.body;
+      if (!target) {
+        domInjecting = false;
+        setTimeout(injectScript, 50);
+        return;
+      }
       const script = document.createElement('script');
       script.src = ApiStudioCompat.getURL('inject.js');
-      script.onload = function() { this.remove(); };
-      (document.documentElement || document.head || document.body).appendChild(script);
+      script.onload = function() {
+        domInjectLoaded = true;
+        domInjecting = false;
+        this.remove();
+        publishMockState();
+        if (pendingStatePublish) {
+          pendingStatePublish = false;
+          publishMockState();
+        }
+      };
+      script.onerror = function() {
+        domInjecting = false;
+        pendingStatePublish = false;
+        this.remove();
+      };
+      target.appendChild(script);
     } catch (e) {
+      domInjecting = false;
       setTimeout(function() {
-        try {
-          const script = document.createElement('script');
-          script.src = ApiStudioCompat.getURL('inject.js');
-          script.onload = function() { this.remove(); };
-          document.documentElement.appendChild(script);
-        } catch (e2) {}
+        injectScript();
       }, 50);
     }
   }
 
-  injectScript();
   loadState();
 })();

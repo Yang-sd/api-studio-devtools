@@ -26,6 +26,44 @@
   var selectedRuleIds = {};
   var selectedReplayHistoryIds = {};
   var undoToastSeq = 0;
+  var activeTabName = 'network';
+
+  // 高流量页面必须有明确预算，避免请求数、DOM 行数和响应体在内存中无界增长。
+  var MAX_CAPTURED_REQUESTS = 300;
+  var MAX_RENDERED_REQUESTS = 200;
+  var MAX_LAZY_RESPONSE_ENTRIES = 80;
+  var MAX_REQUEST_BODY_CHARS = 256 * 1024;
+  var MAX_AUTO_RESPONSE_BODY_BYTES = 256 * 1024;
+  var MAX_RESPONSE_BODY_BYTES = 1024 * 1024;
+  var MAX_CAPTURED_REQUESTS_PER_SECOND = 400;
+  var CAPTURE_BATCH_DELAY_MS = 100;
+  var RESPONSE_LOAD_IDLE_MS = 240;
+  var pendingNetworkRequests = [];
+  var networkBatchTimer = null;
+  var networkStatsTimer = null;
+  var networkRenderHandle = null;
+  var beaconRenderHandle = null;
+  var latestHighlightTimer = null;
+  var responseLoadTimer = null;
+  var responseEntryById = new Map();
+  var responseCallbacksById = new Map();
+  var beaconPayloadCache = new Map();
+  var panelVisible = window.__API_STUDIO_PANEL_VISIBLE__ !== false;
+  var capturePausedByUser = false;
+  var captureScope = 'api';
+  var networkListenerAttached = false;
+  var networkObservedCount = 0;
+  var networkAcceptedCount = 0;
+  var networkFilteredCount = 0;
+  var networkOverloadDroppedCount = 0;
+  var networkEvictedCount = 0;
+  var captureRateWindowStartedAt = 0;
+  var captureRateAcceptedCount = 0;
+  var locatorHistory = [];
+  var locatorPicking = false;
+  var locatorSessionId = '';
+  var locatorStatusState = 'ready';
+  var MAX_LOCATOR_HISTORY = 100;
 
   // ====== DOM ======
   var $ = function(id) { return document.getElementById(id); };
@@ -59,6 +97,7 @@
   var tabBeacon = $('tabBeacon');
   var tabCookies = $('tabCookies');
   var tabReplay = $('tabReplay');
+  var tabLocator = $('tabLocator');
   var tabQr = $('tabQr');
 
   // Mock
@@ -84,6 +123,9 @@
   var emptyState = $('emptyState');
   var countBadge = $('countBadge');
   var clearBtn = $('clearBtn');
+  var captureToggleBtn = $('captureToggleBtn');
+  var captureToggleText = $('captureToggleText');
+  var captureScopeSelect = $('captureScopeSelect');
   var detailEmpty = $('detailEmpty');
   var detailContent = $('detailContent');
   var copyDetailUrlBtn = $('copyDetailUrlBtn');
@@ -163,6 +205,15 @@
   var copyCookiesHeaderBtn = $('copyCookiesHeaderBtn');
   var copyCookiesSetBtn = $('copyCookiesSetBtn');
   var deleteCookiesEntryBtn = $('deleteCookiesEntryBtn');
+  // Locator
+  var locatorPickBtn = $('locatorPickBtn');
+  var locatorPickText = $('locatorPickText');
+  var locatorStatusDot = $('locatorStatusDot');
+  var locatorStatus = $('locatorStatus');
+  var locatorContinuous = $('locatorContinuous');
+  var locatorClearBtn = $('locatorClearBtn');
+  var locatorTableBody = $('locatorTableBody');
+  var locatorEmpty = $('locatorEmpty');
   // QR
   var qrInput = $('qrInput');
   var qrCanvas = $('qrCanvas');
@@ -224,6 +275,7 @@
       'theme.toggleTitle': '切换主题，当前为 {mode}',
       'tab.network': '网络',
       'tab.replay': '重放',
+      'tab.locator': 'Locator',
       'tab.qr': 'QR',
       'tab.mock': 'Mock',
       'tab.beacon': '埋点',
@@ -302,6 +354,17 @@
       'beacon.unimport': '撤销 Beacon',
       'network.count': '{count} 个请求',
       'network.countFiltered': '{visible}/{total} 个请求',
+      'network.countLimited': '显示 {shown}/{total} 个请求',
+      'network.capturePause': '暂停抓包',
+      'network.captureResume': '继续抓包',
+      'network.captureRunningTitle': '正在捕获请求，点击暂停',
+      'network.capturePausedTitle': '抓包已暂停，点击继续',
+      'network.captureScopeLabel': '捕获',
+      'network.captureScopeTitle': '选择从源头捕获的资源范围',
+      'network.captureScopeApi': 'API / Beacon',
+      'network.captureScopeAll': '全部资源',
+      'network.captureStats': '观察 {observed}，接收 {accepted}，保留 {retained}，范围过滤 {filtered}，超载丢弃 {dropped}，内存淘汰 {evicted}',
+      'network.captureOverloadTitle': '请求过快，已从源头丢弃 {count} 条以保护浏览器性能',
       'network.filterPath': '过滤路径...',
       'network.filterAll': '全部',
       'network.filterImage': '图片',
@@ -321,6 +384,38 @@
       'network.reqBody': '请求体',
       'network.resHeaders': '响应 Headers',
       'network.resBody': '响应体',
+      'network.responseLoad': '加载响应体',
+      'network.responseManualUnknown': '响应大小未知，为避免大响应瞬间占用内存，已停止自动读取。',
+      'network.responseManualLarge': '响应体约 {size}，为保持面板流畅，已停止自动读取。',
+      'locator.start': '拾取元素',
+      'locator.stop': '停止拾取',
+      'locator.ready': '点击拾取后，到页面中选择输入框、按钮或其他元素。',
+      'locator.picking': '正在拾取：移动到页面元素上并点击，按 Esc 取消。',
+      'locator.picked': '已获取 {element} 的稳定定位。',
+      'locator.unsupported': '当前页面无法启动拾取，请刷新页面后重试；浏览器内部页面不支持此功能。',
+      'locator.failed': '定位生成失败：{message}',
+      'locator.continuous': '连续拾取',
+      'locator.continuousTitle': '开启后可连续选择多个元素',
+      'locator.policy': '只生成经过唯一性验证的稳定定位；不会生成 nth-child、绝对数字 XPath 或屏幕坐标。',
+      'locator.element': '元素',
+      'locator.recommended': '推荐定位',
+      'locator.context': '上下文',
+      'locator.actions': '操作',
+      'locator.emptyTitle': '还没有拾取元素',
+      'locator.emptyHint': '点击“拾取元素”，然后在被调试页面中点击目标控件。',
+      'locator.copy': '复制',
+      'locator.copySuccess': '定位已复制',
+      'locator.delete': '删除',
+      'locator.topFrame': '顶层页面',
+      'locator.iframe': 'iframe',
+      'locator.shadow': 'Shadow DOM',
+      'locator.noStable': '未找到稳定且唯一的定位，请为元素补充 data-testid、id 或 name。',
+      'locator.noXpathShadow': 'Shadow DOM 内不能使用普通全局 XPath。',
+      'locator.textWarning': 'XPath 依赖文本，页面文案变化后可能失效。',
+      'locator.frameWarning': 'Selenium 使用前需要先切换到对应 iframe。',
+      'locator.shadowWarning': 'Selenium 4 需要逐层进入 Shadow Root。',
+      'locator.deleted': '已删除元素定位',
+      'locator.cleared': '已清空元素定位',
       'replay.import': '导入 Replay',
       'replay.imported': '已导入 Replay',
       'replay.unimport': '撤销 Replay',
@@ -438,6 +533,7 @@
       'theme.toggleTitle': 'Switch theme, current: {mode}',
       'tab.network': 'Network',
       'tab.replay': 'Replay',
+      'tab.locator': 'Locator',
       'tab.qr': 'QR',
       'tab.mock': 'Mock',
       'tab.beacon': 'Beacon',
@@ -516,6 +612,17 @@
       'beacon.unimport': 'Remove Beacon',
       'network.count': '{count} requests',
       'network.countFiltered': '{visible}/{total} requests',
+      'network.countLimited': 'Showing {shown}/{total} requests',
+      'network.capturePause': 'Pause capture',
+      'network.captureResume': 'Resume capture',
+      'network.captureRunningTitle': 'Capturing requests. Click to pause.',
+      'network.capturePausedTitle': 'Capture is paused. Click to resume.',
+      'network.captureScopeLabel': 'Capture',
+      'network.captureScopeTitle': 'Choose which resource types are captured at the source',
+      'network.captureScopeApi': 'API / Beacon',
+      'network.captureScopeAll': 'All resources',
+      'network.captureStats': 'Observed {observed}, accepted {accepted}, retained {retained}, scope-filtered {filtered}, overload-dropped {dropped}, evicted {evicted}',
+      'network.captureOverloadTitle': '{count} requests were dropped at the source to protect browser performance',
       'network.filterPath': 'Filter path...',
       'network.filterAll': 'All',
       'network.filterImage': 'Images',
@@ -535,6 +642,38 @@
       'network.reqBody': 'Request Body',
       'network.resHeaders': 'Response Headers',
       'network.resBody': 'Response Body',
+      'network.responseLoad': 'Load response',
+      'network.responseManualUnknown': 'The response size is unknown. Automatic loading was stopped to avoid a sudden memory spike.',
+      'network.responseManualLarge': 'The response is about {size}. Automatic loading was stopped to keep the panel responsive.',
+      'locator.start': 'Pick element',
+      'locator.stop': 'Stop picking',
+      'locator.ready': 'Start picking, then select an input, button, or other element on the inspected page.',
+      'locator.picking': 'Picking: point to a page element and click. Press Esc to cancel.',
+      'locator.picked': 'Stable locator captured for {element}.',
+      'locator.unsupported': 'Picking could not start on this page. Refresh and retry; browser internal pages are unsupported.',
+      'locator.failed': 'Locator generation failed: {message}',
+      'locator.continuous': 'Continuous',
+      'locator.continuousTitle': 'Keep picking multiple elements until stopped',
+      'locator.policy': 'Only stable, uniqueness-verified locators are generated. nth-child, absolute numeric XPath, and screen coordinates are never used.',
+      'locator.element': 'Element',
+      'locator.recommended': 'Recommended',
+      'locator.context': 'Context',
+      'locator.actions': 'Actions',
+      'locator.emptyTitle': 'No elements picked yet',
+      'locator.emptyHint': 'Click Pick element, then click the target control on the inspected page.',
+      'locator.copy': 'Copy',
+      'locator.copySuccess': 'Locator copied',
+      'locator.delete': 'Delete',
+      'locator.topFrame': 'Top frame',
+      'locator.iframe': 'iframe',
+      'locator.shadow': 'Shadow DOM',
+      'locator.noStable': 'No stable unique locator was found. Add data-testid, id, or name to this element.',
+      'locator.noXpathShadow': 'Regular global XPath cannot cross a Shadow DOM boundary.',
+      'locator.textWarning': 'This XPath depends on visible text and may break when copy changes.',
+      'locator.frameWarning': 'Switch to the corresponding iframe before using this locator in Selenium.',
+      'locator.shadowWarning': 'Selenium 4 must enter each Shadow Root in sequence.',
+      'locator.deleted': 'Element locator deleted',
+      'locator.cleared': 'Element locators cleared',
       'replay.import': 'Import Replay',
       'replay.imported': 'Replay imported',
       'replay.unimport': 'Remove Replay',
@@ -812,6 +951,11 @@
     if (masterToggleText) masterToggleText.textContent = masterToggle && masterToggle.checked ? t('mock.on') : t('mock.off');
 
     setElementText('clearBtn', 'common.clear');
+    var apiCaptureOption = captureScopeSelect ? captureScopeSelect.querySelector('option[value="api"]') : null;
+    var allCaptureOption = captureScopeSelect ? captureScopeSelect.querySelector('option[value="all"]') : null;
+    if (apiCaptureOption) apiCaptureOption.textContent = t('network.captureScopeApi');
+    if (allCaptureOption) allCaptureOption.textContent = t('network.captureScopeAll');
+    setElementTitle('captureScopeSelect', 'network.captureScopeTitle');
     setElementPlaceholder('networkSearchInput', 'network.filterPath');
     setFilterText('all', 'network.filterAll');
     setFilterText('image', 'network.filterImage');
@@ -830,6 +974,11 @@
     setElementText('importCookiesBtn', 'cookies.import');
     setElementText('copyDetailUrlBtn', 'network.copyUrl');
     setSelectorText('#detailContent .detail-header h3', 'network.detailTitle');
+    updateNetworkCaptureControls();
+    setElementText('locatorClearBtn', 'common.clear');
+    var locatorContinuousWrap = locatorContinuous ? locatorContinuous.closest('.locator-continuous') : null;
+    if (locatorContinuousWrap) locatorContinuousWrap.title = t('locator.continuousTitle');
+    updateLocatorControls();
 
     setElementPlaceholder('beaconPathInput', 'beacon.pathPlaceholder');
     setElementText('addBeaconConditionBtn', 'beacon.addCondition');
@@ -922,6 +1071,7 @@
     renderCookiesTab();
     renderReplayBodyEditor({ forceRows: true });
     renderReplayHistory();
+    renderLocatorTable();
     renderReplayResult(replayRequestId ? findReq(replayRequestId) : null);
     renderQrTab();
     refreshDetailImportState();
@@ -947,6 +1097,8 @@
   }
 
   function activateTab(tab) {
+    var previousTab = activeTabName;
+    activeTabName = tab;
     document.querySelectorAll('.tab').forEach(function(t) {
       t.classList.toggle('active', t.dataset.tab === tab);
     });
@@ -955,16 +1107,20 @@
     if (tabBeacon) tabBeacon.classList.toggle('active', tab === 'beacon');
     if (tabCookies) tabCookies.classList.toggle('active', tab === 'cookies');
     if (tabReplay) tabReplay.classList.toggle('active', tab === 'replay');
+    if (tabLocator) tabLocator.classList.toggle('active', tab === 'locator');
     if (tabQr) tabQr.classList.toggle('active', tab === 'qr');
+    if (previousTab === 'locator' && tab !== 'locator' && locatorPicking) stopLocatorPicker({ silent: true });
     if (tab === 'mock') loadRules();
     if (tab === 'network') {
       syncImportedState();
       renderNetworkList();
+      updateBadge();
       refreshDetailImportState();
     }
     if (tab === 'beacon') renderBeaconTab();
     if (tab === 'cookies') renderCookiesTab();
     if (tab === 'replay') renderReplayTab();
+    if (tab === 'locator') renderLocatorTable();
     if (tab === 'qr') renderQrTab();
   }
 
@@ -1856,14 +2012,131 @@
   // NETWORK TAB — CAPTURE REQUESTS
   // ======================================================================
 
-  if (chrome.devtools && chrome.devtools.network && chrome.devtools.network.onRequestFinished) {
-  chrome.devtools.network.onRequestFinished.addListener(function(entry) {
+  function getNetworkRequestEvent() {
+    return chrome.devtools && chrome.devtools.network && chrome.devtools.network.onRequestFinished;
+  }
+
+  function normalizeCaptureScope(value) {
+    return value === 'all' ? 'all' : 'api';
+  }
+
+  function loadNetworkCapturePreferences() {
+    try {
+      captureScope = normalizeCaptureScope(localStorage.getItem('apiStudioCaptureScope') || 'api');
+    } catch (error) {
+      captureScope = 'api';
+    }
+    if (captureScopeSelect) captureScopeSelect.value = captureScope;
+  }
+
+  function shouldCaptureResourceType(resourceType) {
+    if (captureScope === 'all') return true;
+    return resourceType === 'fetch' || resourceType === 'other';
+  }
+
+  function hasNetworkCaptureCapacity(now) {
+    now = Number(now || Date.now());
+    if (!captureRateWindowStartedAt || now - captureRateWindowStartedAt >= 1000) {
+      captureRateWindowStartedAt = now;
+      captureRateAcceptedCount = 0;
+    }
+    if (captureRateAcceptedCount >= MAX_CAPTURED_REQUESTS_PER_SECOND) return false;
+    captureRateAcceptedCount++;
+    return true;
+  }
+
+  function isNetworkCaptureRunning() {
+    return panelVisible && !capturePausedByUser && networkListenerAttached;
+  }
+
+  function startNetworkCapture() {
+    var event = getNetworkRequestEvent();
+    if (!event || networkListenerAttached || !panelVisible || capturePausedByUser) return;
+    event.addListener(onNetworkRequestFinished);
+    networkListenerAttached = true;
+    updateNetworkCaptureControls();
+  }
+
+  function stopNetworkCapture() {
+    var event = getNetworkRequestEvent();
+    if (event && networkListenerAttached) {
+      try { event.removeListener(onNetworkRequestFinished); } catch (error) {}
+    }
+    networkListenerAttached = false;
+    if (networkBatchTimer) {
+      clearTimeout(networkBatchTimer);
+      networkBatchTimer = null;
+      flushNetworkBatch();
+    }
+    if (responseLoadTimer) {
+      clearTimeout(responseLoadTimer);
+      responseLoadTimer = null;
+    }
+    if (networkStatsTimer) {
+      clearTimeout(networkStatsTimer);
+      networkStatsTimer = null;
+    }
+    updateNetworkCaptureControls();
+  }
+
+  function updateNetworkCaptureLifecycle() {
+    if (panelVisible && !capturePausedByUser) startNetworkCapture();
+    else stopNetworkCapture();
+  }
+
+  function setPanelVisible(visible) {
+    panelVisible = visible !== false;
+    updateNetworkCaptureLifecycle();
+    if (!panelVisible) {
+      if (locatorPicking) stopLocatorPicker({ silent: true });
+      return;
+    }
+    renderNetworkList();
+    renderBeaconTab();
+    updateBadge();
+    renderLocatorTable();
+    if (selectedId && activeTabName === 'network') showDetails(selectedId, { deferResponse: true });
+  }
+
+  function updateNetworkCaptureControls() {
+    var running = panelVisible && !capturePausedByUser && networkListenerAttached;
+    if (captureToggleBtn) {
+      captureToggleBtn.classList.toggle('is-paused', !running);
+      captureToggleBtn.setAttribute('aria-pressed', running ? 'true' : 'false');
+      captureToggleBtn.title = t(running ? 'network.captureRunningTitle' : 'network.capturePausedTitle');
+    }
+    if (captureToggleText) captureToggleText.textContent = t(running ? 'network.capturePause' : 'network.captureResume');
+  }
+
+  function scheduleNetworkStatsUpdate() {
+    if (networkStatsTimer) return;
+    networkStatsTimer = setTimeout(function() {
+      networkStatsTimer = null;
+      updateBadge();
+    }, 500);
+  }
+
+  function onNetworkRequestFinished(entry) {
+    networkObservedCount++;
+    var resourceType = requestType(entry);
+    if (!shouldCaptureResourceType(resourceType)) {
+      networkFilteredCount++;
+      scheduleNetworkStatsUpdate();
+      return;
+    }
+    if (!hasNetworkCaptureCapacity(Date.now())) {
+      networkOverloadDroppedCount++;
+      scheduleNetworkStatsUpdate();
+      return;
+    }
+    networkAcceptedCount++;
     var id = 'req_' + Date.now() + '_' + random(6);
     var reqHeaders = (entry.request && entry.request.headers) || [];
     var resHeaders = (entry.response && entry.response.headers) || [];
     var reqHeaderObj = objHeaders(reqHeaders);
     var resHeaderObj = objHeaders(resHeaders);
     var postDataInfo = normalizeEntryPostData(entry.request && entry.request.postData);
+    postDataInfo.text = limitCapturedText(postDataInfo.text, MAX_REQUEST_BODY_CHARS);
     var responseContent = (entry.response && entry.response.content) || {};
     var totalTimeInfo = getEntryTotalTimeInfo(entry);
     var req = {
@@ -1882,69 +2155,247 @@
       postData: postDataInfo.text,
       postDataMimeType: postDataInfo.mimeType,
       postDataParams: postDataInfo.params,
-      replayBodyState: replayBodyStateFromPostDataInfo(postDataInfo, headersToEditorText(reqHeaderObj)),
+      replayBodyState: null,
       mimeType: responseContent.mimeType || '',
+      responseSize: Number(responseContent.size || 0),
       responseContent: '',
       responseEncoding: '',
-      responseBodyState: 'pending',
-      responseBodyMessage: '',
-      resourceType: requestType(entry),
+      responseBodyState: 'deferred',
+      responseBodyMessage: tt('选择请求后再加载响应体，以降低高流量页面的内存占用。', 'Select the request to load its response body and reduce memory use on high-traffic pages.'),
+      resourceType: resourceType,
       imported: false
     };
-
-    entry.getContent(function(content, encoding) {
-      req.responseContent = content || '';
-      req.responseEncoding = encoding || '';
-      applyResponseBodyState(req, content, encoding);
-      saveToStorage(req);
-      if (selectedId === req.id) showDetails(req.id);
-      if (selectedBeaconId === req.id) renderBeaconTab();
-    });
-
-    var shouldSelectLatest = !selectedId || selectedId === latestRequestId;
-    requests.unshift(req);
-    markLatestRequest(req.id);
-    if (shouldSelectLatest) selectedId = req.id;
-    if (requests.length > 500) requests.length = 500;
-    renderNetworkList();
-    if (shouldSelectLatest) {
-      scrollRequestListToTop();
-      showDetails(req.id);
+    prepareLazyResponse(req, entry);
+    pendingNetworkRequests.push(req);
+    if (pendingNetworkRequests.length > MAX_CAPTURED_REQUESTS * 2) {
+      var droppedPending = pendingNetworkRequests.splice(0, pendingNetworkRequests.length - MAX_CAPTURED_REQUESTS);
+      networkOverloadDroppedCount += droppedPending.length;
+      droppedPending.forEach(function(item) {
+        responseEntryById.delete(item.id);
+        beaconPayloadCache.delete(item.id);
+      });
     }
-    refreshBeaconForRequest(req);
+    scheduleNetworkBatchFlush();
+  }
+
+  window.ApiStudioCaptureLifecycle = {
+    setPanelVisible: setPanelVisible
+  };
+
+  function scheduleNetworkBatchFlush() {
+    if (networkBatchTimer) return;
+    networkBatchTimer = setTimeout(flushNetworkBatch, CAPTURE_BATCH_DELAY_MS);
+  }
+
+  function flushNetworkBatch() {
+    networkBatchTimer = null;
+    if (!pendingNetworkRequests.length) return;
+    var batch = pendingNetworkRequests.splice(0, pendingNetworkRequests.length);
+    var wasFollowingLatest = !selectedId || selectedId === latestRequestId;
+    var newestFirst = batch.slice().reverse();
+    requests = newestFirst.concat(requests);
+    var newest = newestFirst[0];
+    markLatestRequest(newest.id);
+    pruneCapturedRequests();
+    pruneLazyResponseEntries();
+
+    if (wasFollowingLatest) {
+      selectedId = newest.id;
+      if (isNetworkCaptureRunning() && activeTabName === 'network') {
+        scrollRequestListToTop();
+        scheduleSelectedResponseLoad(newest.id);
+      }
+    }
+
+    refreshBeaconForBatch(newestFirst);
+    renderNetworkList();
     updateBadge();
-  });
   }
 
-  function refreshBeaconForRequest(req) {
-    if (!req || !beaconConfig.enabled || !beaconConfig.path) return;
-    if (!isBeaconMatch(req)) return;
-    selectedBeaconId = req.id;
-    renderBeaconTab();
-  }
-
-  function saveToStorage(req) {
-    chrome.storage.local.get('capturedRequests', function(result) {
-      var list = result.capturedRequests || [];
-      var snapshot = {
-        id: req.id, url: req.url, method: req.method, status: req.status,
-        statusText: req.statusText, headers: req.headers, resHeaders: req.resHeaders,
-        totalTimeMs: req.totalTimeMs, timeSource: req.timeSource || '', startedDateTime: req.startedDateTime,
-        cookies: req.cookies, setCookies: req.setCookies, postData: req.postData || '',
-        postDataMimeType: req.postDataMimeType || '', postDataParams: req.postDataParams || [],
-        replayBodyState: req.replayBodyState || null,
-        mimeType: req.mimeType, responseContent: req.responseContent,
-        responseEncoding: req.responseEncoding || '',
-        responseBodyState: req.responseBodyState || '',
-        responseBodyMessage: req.responseBodyMessage || '',
-        imported: !!req.imported, ruleId: req.ruleId || ''
-      };
-      var existing = list.find(function(r) { return r.url === req.url && r.method === req.method; });
-      if (existing) Object.assign(existing, snapshot);
-      else list.unshift(snapshot);
-      if (list.length > 30) list.length = 30;
-      chrome.storage.local.set({ capturedRequests: list });
+  function pruneCapturedRequests() {
+    if (requests.length <= MAX_CAPTURED_REQUESTS) return;
+    var removed = requests.splice(MAX_CAPTURED_REQUESTS);
+    networkEvictedCount += removed.length;
+    removed.forEach(function(req) {
+      responseEntryById.delete(req.id);
+      responseCallbacksById.delete(req.id);
+      beaconPayloadCache.delete(req.id);
+      delete highlightedRequestIds[req.id];
     });
+  }
+
+  function pruneLazyResponseEntries() {
+    requests.slice(MAX_LAZY_RESPONSE_ENTRIES).forEach(function(req) {
+      responseEntryById.delete(req.id);
+    });
+  }
+
+  function prepareLazyResponse(req, entry) {
+    var sizeInfo = getExpectedResponseSizeInfo(req);
+    var expectedSize = sizeInfo.value;
+    var mimeType = String(req.mimeType || getHeaderCaseInsensitive(req.resHeaders || {}, 'content-type') || '').toLowerCase();
+    var contentLengthValue = getHeaderCaseInsensitive(req.resHeaders || {}, 'content-length');
+    if (req.status === 204 || req.method === 'HEAD' || String(contentLengthValue) === '0') {
+      req.responseBodyState = 'empty';
+      req.responseBodyMessage = tt('该请求没有可返回的响应体。', 'This request has no response body.');
+      return;
+    }
+    if (expectedSize > MAX_RESPONSE_BODY_BYTES) {
+      req.responseBodyState = 'too-large';
+      req.responseBodyMessage = tt('响应体约 {size}，超过 1 MB 安全预览上限；已跳过加载以保护浏览器性能。', 'The response is about {size}, above the 1 MB safe preview limit. Loading was skipped to protect browser performance.', { size: formatByteSize(expectedSize) });
+      return;
+    }
+    if (isBinaryMimeType(mimeType) || isStreamingLike(req, mimeType)) {
+      applyResponseBodyState(req, '', '');
+      return;
+    }
+    responseEntryById.set(req.id, entry);
+    if (!sizeInfo.known) {
+      req.responseBodyState = 'manual';
+      req.responseBodyMessage = t('network.responseManualUnknown');
+    } else if (expectedSize > MAX_AUTO_RESPONSE_BODY_BYTES) {
+      req.responseBodyState = 'manual';
+      req.responseBodyMessage = t('network.responseManualLarge', { size: formatByteSize(expectedSize) });
+    }
+  }
+
+  function limitCapturedText(value, maxChars) {
+    var text = String(value || '');
+    if (text.length <= maxChars) return text;
+    return text.slice(0, maxChars) + '\n\n[API Studio: request body truncated for performance]';
+  }
+
+  function scheduleSelectedResponseLoad(id, delayMs) {
+    var request = findReq(id);
+    if (!request || request.responseBodyState !== 'deferred') return;
+    if (responseLoadTimer) clearTimeout(responseLoadTimer);
+    responseLoadTimer = setTimeout(function() {
+      responseLoadTimer = null;
+      if (selectedId !== id) return;
+      if (activeTabName === 'network') showDetails(id, { deferResponse: true });
+      loadResponseBody(id);
+    }, delayMs === undefined ? RESPONSE_LOAD_IDLE_MS : delayMs);
+  }
+
+  function loadResponseBody(id, callback) {
+    var req = findReq(id);
+    if (!req) return;
+    if (typeof callback === 'function') addResponseLoadCallback(id, callback);
+    if (req.responseBodyState !== 'deferred' && req.responseBodyState !== 'manual' && req.responseBodyState !== 'loading') {
+      finishResponseLoadCallbacks(id, req);
+      return;
+    }
+    if (req.responseBodyState === 'loading') return;
+
+    var entry = responseEntryById.get(id);
+    if (!entry || typeof entry.getContent !== 'function') {
+      req.responseBodyState = 'unavailable';
+      req.responseBodyMessage = tt('该请求已超出内存保留窗口，响应体未加载。', 'This request is outside the in-memory window, so its response body was not loaded.');
+      finishResponseLoad(id, req);
+      return;
+    }
+
+    var expectedSize = getExpectedResponseSize(req);
+    var mimeType = String(req.mimeType || getHeaderCaseInsensitive(req.resHeaders || {}, 'content-type') || '').toLowerCase();
+    if (expectedSize > MAX_RESPONSE_BODY_BYTES) {
+      req.responseBodyState = 'too-large';
+      req.responseBodyMessage = tt('响应体约 {size}，超过 1 MB 安全预览上限；已跳过加载以保护浏览器性能。', 'The response is about {size}, above the 1 MB safe preview limit. Loading was skipped to protect browser performance.', { size: formatByteSize(expectedSize) });
+      finishResponseLoad(id, req);
+      return;
+    }
+    if (isBinaryMimeType(mimeType) || isStreamingLike(req, mimeType)) {
+      applyResponseBodyState(req, '', '');
+      finishResponseLoad(id, req);
+      return;
+    }
+
+    req.responseBodyState = 'loading';
+    req.responseBodyMessage = tt('响应体获取中...', 'Fetching response body...');
+    if (selectedId === id) renderResponseBody(req, mimeType || '-');
+    var settled = false;
+    var timeout = setTimeout(function() {
+      if (settled) return;
+      settled = true;
+      req.responseBodyState = 'unavailable';
+      req.responseBodyMessage = tt('响应体读取超时，已停止等待以保持面板流畅。', 'Response body loading timed out and was stopped to keep the panel responsive.');
+      finishResponseLoad(id, req);
+    }, 3000);
+    try {
+      entry.getContent(function(content, encoding) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        var body = String(content || '');
+        if (body.length > MAX_RESPONSE_BODY_BYTES) {
+          req.responseContent = body.slice(0, MAX_RESPONSE_BODY_BYTES);
+          req.responseEncoding = encoding || '';
+          req.responseBodyState = 'truncated';
+          req.responseBodyMessage = tt('响应体已截取前 1 MB 展示，以保护浏览器性能。', 'The response body was truncated to the first 1 MB to protect browser performance.');
+        } else {
+          req.responseContent = body;
+          req.responseEncoding = encoding || '';
+          applyResponseBodyState(req, body, encoding);
+        }
+        finishResponseLoad(id, req);
+      });
+    } catch (error) {
+      settled = true;
+      clearTimeout(timeout);
+      req.responseBodyState = 'unavailable';
+      req.responseBodyMessage = tt('浏览器未能读取这条响应体。', 'The browser could not read this response body.');
+      finishResponseLoad(id, req);
+    }
+  }
+
+  function getExpectedResponseSize(req) {
+    return getExpectedResponseSizeInfo(req).value;
+  }
+
+  function getExpectedResponseSizeInfo(req) {
+    var headerSize = Number(getHeaderCaseInsensitive(req.resHeaders || {}, 'content-length') || 0);
+    var responseSize = Number(req.responseSize || 0);
+    var headerValue = getHeaderCaseInsensitive(req.resHeaders || {}, 'content-length');
+    var headerKnown = headerValue !== undefined && headerValue !== null && headerValue !== '' && isFinite(headerSize) && headerSize >= 0;
+    var responseKnown = isFinite(responseSize) && responseSize > 0;
+    return {
+      known: headerKnown || responseKnown,
+      value: Math.max(responseKnown ? responseSize : 0, headerKnown ? headerSize : 0)
+    };
+  }
+
+  function formatByteSize(bytes) {
+    var value = Number(bytes || 0);
+    if (value < 1024) return value + ' B';
+    if (value < 1024 * 1024) return Math.round(value / 1024) + ' KB';
+    return (value / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  function addResponseLoadCallback(id, callback) {
+    var callbacks = responseCallbacksById.get(id) || [];
+    callbacks.push(callback);
+    responseCallbacksById.set(id, callbacks);
+  }
+
+  function finishResponseLoad(id, req) {
+    responseEntryById.delete(id);
+    if (selectedId === id) showDetails(id, { deferResponse: true });
+    finishResponseLoadCallbacks(id, req);
+  }
+
+  function finishResponseLoadCallbacks(id, req) {
+    var callbacks = responseCallbacksById.get(id) || [];
+    responseCallbacksById.delete(id);
+    callbacks.forEach(function(callback) {
+      try { callback(req); } catch (e) {}
+    });
+  }
+
+  function refreshBeaconForBatch(batch) {
+    if (!beaconConfig.enabled || !beaconConfig.path) return;
+    var matched = (batch || []).find(function(req) { return isBeaconMatch(req); });
+    if (!matched) return;
+    selectedBeaconId = matched.id;
+    renderBeaconTab();
   }
 
   function mergeCapturedMockRequests(list) {
@@ -1983,7 +2434,7 @@
       if (!latestRequestId) latestRequestId = req.id;
       requests.unshift(req);
     });
-    if (requests.length > 500) requests.length = 500;
+    pruneCapturedRequests();
   }
 
   function loadCapturedMockRequests() {
@@ -1996,6 +2447,16 @@
   }
 
   function renderNetworkList() {
+    if (!panelVisible || activeTabName !== 'network') return;
+    if (networkRenderHandle) return;
+    var schedule = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : function(callback) { return setTimeout(callback, 16); };
+    networkRenderHandle = schedule(function() {
+      networkRenderHandle = null;
+      renderNetworkListNow();
+    });
+  }
+
+  function renderNetworkListNow() {
     if (!requestBody) return;
     syncLatestRequestFromList();
     var visibleRequests = filteredRequests();
@@ -2004,7 +2465,8 @@
       var hint = emptyState.querySelector('.hint');
       if (hint) hint.textContent = requests.length === 0 ? t('network.emptyHint') : t('network.emptyNoMatch');
     }
-    requestBody.innerHTML = visibleRequests.map(function(r, index) {
+    var renderedRequests = visibleRequests.slice(0, MAX_RENDERED_REQUESTS);
+    requestBody.innerHTML = renderedRequests.map(function(r, index) {
       var classes = [];
       if (r.id === selectedId) classes.push('selected');
       if (r.id === latestRequestId) classes.push('latest-row');
@@ -2020,8 +2482,11 @@
 
   function markLatestRequest(id) {
     latestRequestId = id;
+    highlightedRequestIds = {};
     highlightedRequestIds[id] = true;
-    setTimeout(function() {
+    if (latestHighlightTimer) clearTimeout(latestHighlightTimer);
+    latestHighlightTimer = setTimeout(function() {
+      latestHighlightTimer = null;
       if (!highlightedRequestIds[id]) return;
       delete highlightedRequestIds[id];
       renderNetworkList();
@@ -2035,6 +2500,28 @@
   function resetLatestRequestState() {
     latestRequestId = null;
     highlightedRequestIds = {};
+  }
+
+  function resetNetworkCaptureRuntime() {
+    if (networkBatchTimer) clearTimeout(networkBatchTimer);
+    if (networkStatsTimer) clearTimeout(networkStatsTimer);
+    if (responseLoadTimer) clearTimeout(responseLoadTimer);
+    if (latestHighlightTimer) clearTimeout(latestHighlightTimer);
+    networkBatchTimer = null;
+    networkStatsTimer = null;
+    responseLoadTimer = null;
+    latestHighlightTimer = null;
+    pendingNetworkRequests.length = 0;
+    responseEntryById.clear();
+    responseCallbacksById.clear();
+    beaconPayloadCache.clear();
+    networkObservedCount = 0;
+    networkAcceptedCount = 0;
+    networkFilteredCount = 0;
+    networkOverloadDroppedCount = 0;
+    networkEvictedCount = 0;
+    captureRateWindowStartedAt = 0;
+    captureRateAcceptedCount = 0;
   }
 
   function syncLatestRequestFromList() {
@@ -2100,9 +2587,27 @@
   }
 
   function updateBadge() {
-    if (!countBadge) return;
+    if (!panelVisible || !countBadge || activeTabName !== 'network') return;
     var visibleCount = filteredRequests().length;
+    var statsTitle = t('network.captureStats', {
+      observed: networkObservedCount,
+      accepted: networkAcceptedCount,
+      retained: requests.length,
+      filtered: networkFilteredCount,
+      dropped: networkOverloadDroppedCount,
+      evicted: networkEvictedCount
+    });
+    countBadge.classList.toggle('is-overloaded', networkOverloadDroppedCount > 0);
+    if (networkOverloadDroppedCount > 0) {
+      statsTitle = t('network.captureOverloadTitle', { count: networkOverloadDroppedCount }) + '\n' + statsTitle;
+    }
+    if (visibleCount > MAX_RENDERED_REQUESTS) {
+      countBadge.textContent = t('network.countLimited', { shown: MAX_RENDERED_REQUESTS, total: visibleCount });
+      countBadge.title = t('network.countFiltered', { visible: visibleCount, total: requests.length }) + '\n' + statsTitle;
+      return;
+    }
     countBadge.textContent = visibleCount === requests.length ? t('network.count', { count: requests.length }) : t('network.countFiltered', { visible: visibleCount, total: requests.length });
+    countBadge.title = statsTitle;
   }
 
   // Network: click / right-click events
@@ -2143,6 +2648,12 @@
 
   if (detailContent) {
     detailContent.addEventListener('click', function(e) {
+      var loadBtn = e.target.closest('[data-action="load-response-body"]');
+      if (loadBtn) {
+        e.preventDefault();
+        if (selectedId) loadResponseBody(selectedId);
+        return;
+      }
       var copyBtn = e.target.closest('.copy-resource-url');
       if (!copyBtn) return;
       e.preventDefault();
@@ -2213,6 +2724,27 @@
     });
   }
 
+  if (captureToggleBtn) {
+    captureToggleBtn.addEventListener('click', function() {
+      capturePausedByUser = !capturePausedByUser;
+      updateNetworkCaptureLifecycle();
+      showToast(capturePausedByUser
+        ? tt('抓包已暂停', 'Network capture paused')
+        : tt('抓包已继续', 'Network capture resumed'));
+    });
+  }
+
+  if (captureScopeSelect) {
+    captureScopeSelect.addEventListener('change', function() {
+      captureScope = normalizeCaptureScope(captureScopeSelect.value);
+      captureScopeSelect.value = captureScope;
+      try { localStorage.setItem('apiStudioCaptureScope', captureScope); } catch (error) {}
+      showToast(captureScope === 'api'
+        ? tt('仅捕获 API 与 Beacon 请求', 'Capturing API and Beacon requests only')
+        : tt('正在捕获全部资源', 'Capturing all resources'));
+    });
+  }
+
   if (clearBtn) {
     clearBtn.addEventListener('click', function() {
       var previousRequests = requests.map(cloneData);
@@ -2221,6 +2753,7 @@
       var previousBeaconId = selectedBeaconId;
       var previousHighlighted = Object.assign({}, highlightedRequestIds);
       requests.length = 0;
+      resetNetworkCaptureRuntime();
       selectedId = null;
       replayRequestId = null;
       selectedBeaconId = '';
@@ -2345,6 +2878,7 @@
       var previousBeaconId = selectedBeaconId;
       var previousHighlighted = Object.assign({}, highlightedRequestIds);
       requests.length = 0;
+      resetNetworkCaptureRuntime();
       selectedId = null;
       selectedBeaconId = '';
       highlightedRequestIds = {};
@@ -2803,7 +3337,8 @@
   }
 
   // Show details
-  function showDetails(id) {
+  function showDetails(id, options) {
+    options = options || {};
     var req = findReq(id);
     if (!req) return;
     if (selectedId !== id) {
@@ -2840,6 +3375,9 @@
     setText('detailResHeaders', formatHeaders(req.resHeaders));
 
     renderResponseBody(req, ct);
+    if (!options.deferResponse && req.responseBodyState === 'deferred') {
+      scheduleSelectedResponseLoad(id, 0);
+    }
 
     updateImportButton(req);
     reFind();
@@ -3049,6 +3587,14 @@
   function renderResponseBody(req, mimeType) {
     var el = $('detailResBody');
     if (!el) return;
+    if (req && req.responseBodyState === 'manual') {
+      el.classList.remove('is-media');
+      el.innerHTML = '<div class="response-load-prompt">' +
+        '<div class="response-load-copy">' + escHtml(req.responseBodyMessage || t('network.responseManualUnknown')) + '</div>' +
+        '<button type="button" class="btn btn-primary btn-sm response-load-btn" data-action="load-response-body">' + escHtml(t('network.responseLoad')) + '</button>' +
+      '</div>';
+      return;
+    }
     var preview = buildMediaPreview(req, mimeType);
     if (preview) {
       el.classList.add('is-media');
@@ -4795,7 +5341,7 @@
           ruleId: ''
         };
         requests.unshift(req);
-        if (requests.length > 500) requests.length = 500;
+        pruneCapturedRequests();
       }
       req.method = method;
       req.url = url;
@@ -4841,6 +5387,11 @@
   // Import request → create rule
   function importRequest(req) {
     if (req.imported) return;
+    if (req.responseBodyState === 'deferred' || req.responseBodyState === 'manual' || req.responseBodyState === 'loading') {
+      loadResponseBody(req.id, function() { importRequest(req); });
+      showToast(tt('正在按需加载响应体...', 'Loading the response body on demand...'));
+      return;
+    }
 
     var body = req.responseContent || '';
     try { body = JSON.stringify(JSON.parse(body), null, 2); } catch(e) {}
@@ -5212,6 +5763,16 @@
   }
 
   function renderBeaconTab() {
+    if (!panelVisible || activeTabName !== 'beacon') return;
+    if (beaconRenderHandle) return;
+    var schedule = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : function(callback) { return setTimeout(callback, 16); };
+    beaconRenderHandle = schedule(function() {
+      beaconRenderHandle = null;
+      renderBeaconTabNow();
+    });
+  }
+
+  function renderBeaconTabNow() {
     if (!beaconList || !beaconCountBadge) return;
     var matches = getBeaconMatches();
     beaconCountBadge.textContent = matches.length > 0 ? String(matches.length) : '';
@@ -5284,13 +5845,16 @@
   function getBeaconMatches() {
     if (!beaconConfig.enabled || !beaconConfig.path) return [];
     var conditions = getBeaconConditions();
-    return requests.filter(function(req) {
-      return isBeaconMatch(req);
-    }).map(function(req) {
+    var pathKey = beaconConfig.path.toLowerCase();
+    var matches = [];
+    requests.forEach(function(req) {
+      if (!req || !req.url) return;
+      var target = (displayPath(req.url) + '\n' + req.url).toLowerCase();
+      if (target.indexOf(pathKey) === -1) return;
       var parsed = parseBeaconPayload(req);
       var conditionResult = matchBeaconConditions(parsed.merged, conditions);
-      if (!conditionResult.matched) return null;
-      return {
+      if (!conditionResult.matched) return;
+      matches.push({
         id: req.id,
         req: req,
         parsed: parsed,
@@ -5298,8 +5862,9 @@
         matchedConditions: conditionResult.matchedConditions,
         payloadText: stringifyBeaconPayload(parsed.merged),
         summary: buildBeaconSummary(parsed, conditionResult.fieldValues, conditions)
-      };
-    }).filter(Boolean);
+      });
+    });
+    return matches;
   }
 
   function findBeaconMatch(id) {
@@ -5311,6 +5876,9 @@
     var requestIndex = requests.findIndex(function(req) { return req.id === id; });
     var deletedReq = requestIndex >= 0 ? cloneData(requests[requestIndex]) : null;
     requests = requests.filter(function(req) { return req.id !== id; });
+    responseEntryById.delete(id);
+    responseCallbacksById.delete(id);
+    beaconPayloadCache.delete(id);
     delete highlightedRequestIds[id];
     syncLatestRequestFromList();
     if (selectedBeaconId === id) selectedBeaconId = '';
@@ -5361,6 +5929,9 @@
   }
 
   function parseBeaconPayload(req) {
+    var cacheKey = String(req && req.url || '') + '\n' + String(req && req.postData || '');
+    var cached = req && beaconPayloadCache.get(req.id);
+    if (cached && cached.key === cacheKey) return cached.value;
     var query = {};
     try {
       var u = new URL(req.url || '');
@@ -5370,7 +5941,7 @@
     } catch (e) {}
     var bodyRaw = req.postData || '';
     var bodyParsed = parseBeaconBody(bodyRaw, req.headers || {}, req.postDataParams || []);
-    return {
+    var result = {
       query: query,
       body: bodyParsed,
       merged: {
@@ -5378,6 +5949,8 @@
         body: bodyParsed
       }
     };
+    if (req && req.id) beaconPayloadCache.set(req.id, { key: cacheKey, value: result });
+    return result;
   }
 
   function parseBeaconBody(bodyRaw, headers, postDataParams) {
@@ -5913,6 +6486,328 @@
     if (idx >= 0) list[idx] = item;
     else list.unshift(item);
   }
+
+  // ======================================================================
+  // LOCATOR TAB
+  // ======================================================================
+
+  function getInspectedTabId() {
+    try { return Number(chrome.devtools.inspectedWindow.tabId); }
+    catch (error) { return 0; }
+  }
+
+  function loadLocatorHistory() {
+    ApiStudioCompat.storageGet('locatorHistory').then(function(result) {
+      locatorHistory = (result.locatorHistory || []).map(normalizeLocatorResult).filter(Boolean).slice(0, MAX_LOCATOR_HISTORY);
+      renderLocatorTable();
+    }).catch(function() {
+      locatorHistory = [];
+      renderLocatorTable();
+    });
+  }
+
+  function persistLocatorHistory() {
+    ApiStudioCompat.storageSet({ locatorHistory: locatorHistory.slice(0, MAX_LOCATOR_HISTORY) }).catch(function() {});
+  }
+
+  function startLocatorPicker() {
+    if (locatorPicking) return;
+    var tabId = getInspectedTabId();
+    if (!tabId || !ApiStudioCompat.sendTabMessage) {
+      setLocatorStatus(t('locator.unsupported'), 'error');
+      return;
+    }
+
+    locatorSessionId = 'locator_session_' + Date.now() + '_' + random(6);
+    locatorPicking = true;
+    setLocatorStatus(t('locator.picking'), 'picking');
+    ApiStudioCompat.sendTabMessage(tabId, {
+      type: '__API_STUDIO_LOCATOR_START__',
+      sessionId: locatorSessionId,
+      continuous: !!(locatorContinuous && locatorContinuous.checked)
+    }).catch(function() {
+      locatorPicking = false;
+      locatorSessionId = '';
+      setLocatorStatus(t('locator.unsupported'), 'error');
+    });
+  }
+
+  function refreshLocatorPickerMode() {
+    if (!locatorPicking || !locatorSessionId || !ApiStudioCompat.sendTabMessage) return;
+    ApiStudioCompat.sendTabMessage(getInspectedTabId(), {
+      type: '__API_STUDIO_LOCATOR_START__',
+      sessionId: locatorSessionId,
+      continuous: !!(locatorContinuous && locatorContinuous.checked)
+    }).catch(function() {});
+  }
+
+  function stopLocatorPicker(options) {
+    options = options || {};
+    var sessionId = locatorSessionId;
+    locatorPicking = false;
+    locatorSessionId = '';
+    updateLocatorControls();
+    if (!options.preserveStatus) setLocatorStatus(t('locator.ready'), 'ready');
+    if (!ApiStudioCompat.sendTabMessage) return Promise.resolve();
+    return ApiStudioCompat.sendTabMessage(getInspectedTabId(), {
+      type: '__API_STUDIO_LOCATOR_STOP__',
+      sessionId: sessionId
+    }).catch(function() {});
+  }
+
+  function setLocatorStatus(message, state) {
+    locatorStatusState = state || 'ready';
+    if (locatorStatus) locatorStatus.textContent = message || '';
+    updateLocatorControls();
+  }
+
+  function updateLocatorControls() {
+    if (locatorPickBtn) {
+      locatorPickBtn.classList.toggle('is-picking', locatorPicking);
+      locatorPickBtn.setAttribute('aria-pressed', locatorPicking ? 'true' : 'false');
+    }
+    if (locatorPickText) locatorPickText.textContent = t(locatorPicking ? 'locator.stop' : 'locator.start');
+    if (locatorStatusDot) {
+      locatorStatusDot.classList.toggle('is-picking', locatorPicking || locatorStatusState === 'picking');
+      locatorStatusDot.classList.toggle('is-error', locatorStatusState === 'error');
+    }
+  }
+
+  function handleLocatorRuntimeMessage(message, sender) {
+    if (!message || String(message.type || '').indexOf('__API_STUDIO_LOCATOR_') !== 0) return false;
+    var senderTabId = sender && sender.tab ? Number(sender.tab.id) : 0;
+    if (senderTabId && senderTabId !== getInspectedTabId()) return false;
+    if (!locatorSessionId || message.sessionId !== locatorSessionId) return false;
+
+    if (message.type === '__API_STUDIO_LOCATOR_PICKED__') {
+      var item = normalizeLocatorResult(message.data);
+      if (!item) {
+        setLocatorStatus(t('locator.failed', { message: 'INVALID_RESULT' }), 'error');
+        return false;
+      }
+      locatorHistory.unshift(item);
+      if (locatorHistory.length > MAX_LOCATOR_HISTORY) locatorHistory.length = MAX_LOCATOR_HISTORY;
+      persistLocatorHistory();
+      renderLocatorTable();
+
+      var continuous = !!(locatorContinuous && locatorContinuous.checked);
+      if (!continuous) stopLocatorPicker({ preserveStatus: true });
+      setLocatorStatus(t('locator.picked', { element: item.elementLabel || '<' + item.tagName + '>' }), continuous ? 'picking' : 'ready');
+      return false;
+    }
+
+    if (message.type === '__API_STUDIO_LOCATOR_CANCELLED__') {
+      stopLocatorPicker({ preserveStatus: true });
+      setLocatorStatus(t('locator.ready'), 'ready');
+      return false;
+    }
+
+    if (message.type === '__API_STUDIO_LOCATOR_ERROR__') {
+      stopLocatorPicker({ preserveStatus: true });
+      setLocatorStatus(t('locator.failed', { message: safeLocatorString(message.message, 160) || 'UNKNOWN' }), 'error');
+    }
+    return false;
+  }
+
+  chrome.runtime.onMessage.addListener(handleLocatorRuntimeMessage);
+
+  function normalizeLocatorResult(value) {
+    if (!value || typeof value !== 'object') return null;
+    var frame = value.frame && typeof value.frame === 'object' ? value.frame : {};
+    var shadow = value.shadow && typeof value.shadow === 'object' ? value.shadow : {};
+    var hosts = Array.isArray(shadow.hosts) ? shadow.hosts.slice(0, 8).map(function(host) {
+      return {
+        tagName: safeLocatorString(host && host.tagName, 80),
+        css: safeLocatorString(host && host.css, 2000),
+        strategy: safeLocatorString(host && host.strategy, 80)
+      };
+    }) : [];
+    var warnings = Array.isArray(value.warnings) ? value.warnings.map(function(item) {
+      return safeLocatorString(item, 80);
+    }).filter(Boolean).slice(0, 8) : [];
+
+    return {
+      id: safeLocatorString(value.id, 120) || ('locator_' + Date.now() + '_' + random(6)),
+      tagName: safeLocatorString(value.tagName, 80) || 'element',
+      elementLabel: safeLocatorString(value.elementLabel, 240),
+      css: safeLocatorString(value.css, 2000),
+      cssStrategy: safeLocatorString(value.cssStrategy, 100),
+      xpath: safeLocatorString(value.xpath, 3000),
+      xpathStrategy: safeLocatorString(value.xpathStrategy, 100),
+      recommended: safeLocatorString(value.recommended, 3000),
+      recommendedType: value.recommendedType === 'xpath' ? 'xpath' : (value.recommendedType === 'css' ? 'css' : ''),
+      unique: value.unique === true,
+      warnings: warnings,
+      frame: {
+        isTopFrame: frame.isTopFrame !== false,
+        url: safeLocatorString(frame.url, 2000),
+        name: safeLocatorString(frame.name, 240),
+        css: safeLocatorString(frame.css, 2000),
+        xpath: safeLocatorString(frame.xpath, 3000)
+      },
+      shadow: {
+        hosts: hosts,
+        localCss: safeLocatorString(shadow.localCss, 2000),
+        cssChain: safeLocatorString(shadow.cssChain, 5000)
+      },
+      pageUrl: safeLocatorString(value.pageUrl, 2000),
+      capturedAt: normalizeLocatorTimestamp(value.capturedAt)
+    };
+  }
+
+  function safeLocatorString(value, maxLength) {
+    var text = String(value === undefined || value === null ? '' : value);
+    return text.length > maxLength ? text.slice(0, maxLength) : text;
+  }
+
+  function normalizeLocatorTimestamp(value) {
+    var timestamp = Number(value || Date.now());
+    return isFinite(timestamp) && timestamp > 0 ? timestamp : Date.now();
+  }
+
+  function renderLocatorTable() {
+    if (!locatorTableBody || activeTabName !== 'locator') return;
+    if (locatorEmpty) locatorEmpty.style.display = locatorHistory.length ? 'none' : 'flex';
+    locatorTableBody.innerHTML = locatorHistory.map(function(item) {
+      return '<tr data-locator-id="' + escAttr(item.id) + '">' +
+        '<td class="locator-col-element">' + renderLocatorElementCell(item) + '</td>' +
+        '<td class="locator-col-recommended">' + renderLocatorCodeCell(item, 'recommended', item.recommendedType) + '</td>' +
+        '<td class="locator-col-css">' + renderLocatorCodeCell(item, 'css', item.cssStrategy) + '</td>' +
+        '<td class="locator-col-xpath">' + renderLocatorCodeCell(item, 'xpath', item.xpathStrategy) + '</td>' +
+        '<td class="locator-col-context">' + renderLocatorContextCell(item) + '</td>' +
+        '<td class="locator-col-actions"><div class="locator-row-actions"><button class="btn btn-secondary btn-sm" type="button" data-action="delete-locator">' + escHtml(t('locator.delete')) + '</button></div></td>' +
+      '</tr>';
+    }).join('');
+  }
+
+  function renderLocatorElementCell(item) {
+    var label = item.elementLabel || '<' + item.tagName + '>';
+    var page = shortLocatorUrl(item.pageUrl || item.frame.url);
+    return '<div class="locator-element-name">' + escHtml(label) + '</div>' +
+      '<div class="locator-element-meta">' + escHtml(formatDateTime(new Date(item.capturedAt))) + (page ? '<br>' + escHtml(page) : '') + '</div>' +
+      renderLocatorWarnings(item);
+  }
+
+  function renderLocatorCodeCell(item, field, strategy) {
+    var value = getLocatorField(item, field);
+    if (!value) {
+      var emptyMessage = field === 'xpath' && item.shadow.hosts.length ? t('locator.noXpathShadow') : t('locator.noStable');
+      return '<div class="locator-unavailable">' + escHtml(emptyMessage) + '</div>';
+    }
+    var label = field === 'recommended' ? (item.recommendedType || strategy || '-') : (strategy || field);
+    return '<span class="locator-strategy">' + escHtml(label) + '</span>' +
+      '<div class="locator-code-wrap"><code class="locator-code">' + escHtml(value) + '</code>' +
+      '<button class="btn btn-secondary locator-copy-btn" type="button" data-action="copy-locator" data-field="' + escAttr(field) + '" title="' + escAttr(t('locator.copy')) + '" aria-label="' + escAttr(t('locator.copy')) + '">⧉</button></div>';
+  }
+
+  function renderLocatorContextCell(item) {
+    var parts = ['<div class="locator-context-list">'];
+    if (item.frame.isTopFrame) {
+      parts.push('<span class="locator-context-badge">' + escHtml(t('locator.topFrame')) + '</span>');
+    } else {
+      parts.push('<span class="locator-context-badge" title="' + escAttr(item.frame.url || '') + '">' + escHtml(t('locator.iframe')) + ': ' + escHtml(item.frame.name || shortLocatorUrl(item.frame.url) || '-') + '</span>');
+      if (item.frame.css) parts.push(renderLocatorContextCode('frameCss', item.frame.css));
+      else if (item.frame.xpath) parts.push(renderLocatorContextCode('frameXPath', item.frame.xpath));
+    }
+    if (item.shadow.hosts.length) {
+      parts.push('<span class="locator-context-badge">' + escHtml(t('locator.shadow')) + ' × ' + item.shadow.hosts.length + '</span>');
+      if (item.shadow.cssChain) parts.push(renderLocatorContextCode('shadowChain', item.shadow.cssChain));
+    }
+    parts.push('</div>');
+    return parts.join('');
+  }
+
+  function renderLocatorContextCode(field, value) {
+    return '<div class="locator-code-wrap"><code class="locator-code" title="' + escAttr(value) + '">' + escHtml(value) + '</code>' +
+      '<button class="btn btn-secondary locator-copy-btn" type="button" data-action="copy-locator" data-field="' + escAttr(field) + '" title="' + escAttr(t('locator.copy')) + '" aria-label="' + escAttr(t('locator.copy')) + '">⧉</button></div>';
+  }
+
+  function renderLocatorWarnings(item) {
+    var messages = [];
+    if (!item.recommended) messages.push(t('locator.noStable'));
+    if (item.warnings.indexOf('TEXT_MAY_CHANGE') !== -1) messages.push(t('locator.textWarning'));
+    if (!item.frame.isTopFrame) messages.push(t('locator.frameWarning'));
+    if (item.shadow.hosts.length) messages.push(t('locator.shadowWarning'));
+    return messages.length ? '<div class="locator-warning">' + escHtml(messages.join(' ')) + '</div>' : '';
+  }
+
+  function getLocatorField(item, field) {
+    if (!item) return '';
+    if (field === 'recommended') return item.recommended || '';
+    if (field === 'css') return item.css || '';
+    if (field === 'xpath') return item.xpath || '';
+    if (field === 'frameCss') return item.frame && item.frame.css || '';
+    if (field === 'frameXPath') return item.frame && item.frame.xpath || '';
+    if (field === 'shadowChain') return item.shadow && item.shadow.cssChain || '';
+    return '';
+  }
+
+  function shortLocatorUrl(value) {
+    if (!value) return '';
+    try {
+      var url = new URL(value);
+      return url.hostname + (url.pathname === '/' ? '' : url.pathname);
+    } catch (error) {
+      return truncateMiddle(String(value), 80);
+    }
+  }
+
+  if (locatorPickBtn) {
+    locatorPickBtn.addEventListener('click', function() {
+      if (locatorPicking) stopLocatorPicker();
+      else startLocatorPicker();
+    });
+  }
+
+  if (locatorContinuous) locatorContinuous.addEventListener('change', refreshLocatorPickerMode);
+
+  if (locatorClearBtn) {
+    locatorClearBtn.addEventListener('click', function() {
+      if (!locatorHistory.length) return;
+      var previous = locatorHistory.map(cloneData);
+      locatorHistory = [];
+      persistLocatorHistory();
+      renderLocatorTable();
+      showUndoToast(t('locator.cleared'), function() {
+        locatorHistory = previous.map(cloneData);
+        persistLocatorHistory();
+        renderLocatorTable();
+      });
+    });
+  }
+
+  if (locatorTableBody) {
+    locatorTableBody.addEventListener('click', function(event) {
+      var row = event.target.closest('[data-locator-id]');
+      if (!row) return;
+      var itemIndex = locatorHistory.findIndex(function(item) { return item.id === row.dataset.locatorId; });
+      var item = itemIndex >= 0 ? locatorHistory[itemIndex] : null;
+      if (!item) return;
+
+      var copyButton = event.target.closest('[data-action="copy-locator"]');
+      if (copyButton) {
+        copyTextValue(getLocatorField(item, copyButton.dataset.field || ''), t('locator.copySuccess'));
+        return;
+      }
+
+      var deleteButton = event.target.closest('[data-action="delete-locator"]');
+      if (deleteButton) {
+        var deleted = cloneData(item);
+        locatorHistory.splice(itemIndex, 1);
+        persistLocatorHistory();
+        renderLocatorTable();
+        showUndoToast(t('locator.deleted'), function() {
+          locatorHistory = insertAt(locatorHistory.filter(function(entry) { return entry.id !== deleted.id; }), deleted, itemIndex);
+          persistLocatorHistory();
+          renderLocatorTable();
+        });
+      }
+    });
+  }
+
+  window.addEventListener('beforeunload', function() {
+    if (locatorPicking) stopLocatorPicker({ silent: true });
+  });
 
   // ======================================================================
   // QR CODE TAB
@@ -6512,7 +7407,9 @@
     var body = content || '';
     var mimeType = String(req.mimeType || '').toLowerCase();
     var resHeaders = req.resHeaders || {};
-    var contentLength = Number(resHeaders['content-length'] || 0);
+    var contentLengthValue = getHeaderCaseInsensitive(resHeaders, 'content-length');
+    var hasContentLength = contentLengthValue !== undefined && contentLengthValue !== null && contentLengthValue !== '';
+    var contentLength = Number(contentLengthValue || 0);
     var isBinary = isBinaryMimeType(mimeType) || encoding === 'base64';
 
     if (body) {
@@ -6523,7 +7420,7 @@
       return;
     }
 
-    if (contentLength === 0 || req.status === 204 || req.method === 'HEAD') {
+    if ((hasContentLength && contentLength === 0) || req.status === 204 || req.method === 'HEAD') {
       req.responseBodyState = 'empty';
       req.responseBodyMessage = tt('该请求没有可返回的响应体。', 'This request has no response body.');
       return;
@@ -6552,9 +7449,14 @@
       if (state === 'binary' || req.responseEncoding === 'base64') {
         return formatBinaryBody(req);
       }
-      return formatBody(req.responseContent, mimeType);
+      var formatted = formatBody(req.responseContent, mimeType);
+      return state === 'truncated' && req.responseBodyMessage
+        ? req.responseBodyMessage + '\n\n' + formatted
+        : formatted;
     }
-    if (state === 'pending') return tt('响应体获取中...', 'Fetching response body...');
+    if (state === 'pending' || state === 'loading') return tt('响应体获取中...', 'Fetching response body...');
+    if (state === 'deferred') return req.responseBodyMessage || tt('选择请求后加载响应体。', 'Select the request to load its response body.');
+    if (state === 'manual') return req.responseBodyMessage || t('network.responseManualUnknown');
     if (state === 'empty') return req.responseBodyMessage || t('common.emptyText');
     return req.responseBodyMessage || tt('(未获取到响应体)', '(Response body not available)');
   }
@@ -6999,6 +7901,7 @@
   // INIT
   // ======================================================================
 
+  loadNetworkCapturePreferences();
   applyLocale();
   loadThemeMode();
   applyTheme(themeMode, false);
@@ -7014,6 +7917,7 @@
   loadCookieEntries();
   loadReplayHistory();
   loadCapturedMockRequests();
+  loadLocatorHistory();
   loadQrText();
   restorePanelSplit();
   restoreReplaySplit();
@@ -7021,7 +7925,9 @@
   renderCookiesTab();
   renderReplayBodyEditor({ forceRows: true });
   renderReplayHistory();
+  updateLocatorControls();
   renderQrTab();
   renderNetworkList(); // Render network tab (empty initially)
   updateBadge();
+  updateNetworkCaptureLifecycle();
 })();

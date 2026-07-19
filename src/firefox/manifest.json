@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "__MSG_extensionName__",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "default_locale": "zh_CN",
   "description": "__MSG_extensionDescription__",
   "permissions": ["storage", "clipboardWrite"],
@@ -17,7 +17,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["compat.js", "content.js"],
+      "js": ["compat.js", "locator-engine.js", "content.js"],
       "run_at": "document_start",
       "all_frames": true
     }

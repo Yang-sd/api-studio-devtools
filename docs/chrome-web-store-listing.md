@@ -13,7 +13,7 @@
 ## 简短描述
 
 ```text
-在 DevTools 中捕获、重放、Mock 和调试 API 请求，支持埋点分析、Cookie 调试和深色模式。
+在 DevTools 中捕获、重放和 Mock API 请求，并为 Selenium 生成稳定的 CSS/XPath 元素定位。
 ```
 
 ## 详细描述
@@ -27,6 +27,7 @@ API Studio DevTools 是一款面向前端开发和测试场景的浏览器 DevTo
 - Mock：从真实请求快速生成本地 Mock 规则，支持分组、启停和命中计数。
 - Beacon：分析埋点上报请求，支持嵌套字段和重复 key 匹配。
 - Cookies：查看请求 Cookie 和响应 Set-Cookie，便于调试登录态与会话问题。
+- Locator：在页面中拾取元素，生成经过唯一性验证的 CSS/XPath，并识别 iframe 与 Shadow DOM。
 - Theme：支持自动、浅色、深色主题切换。
 
 数据处理说明：
@@ -37,11 +38,11 @@ API Studio DevTools 是一款面向前端开发和测试场景的浏览器 DevTo
 
 ### `storage`
 
-用于在浏览器本地保存 Mock 规则、Replay 历史、分组、命中计数、主题偏好等开发调试数据。
+用于在浏览器本地保存 Mock 规则、Replay 历史、Locator 定位历史、分组、命中计数、主题偏好等开发调试数据。
 
 ### `host_permissions: <all_urls>`
 
-用于在 DevTools 调试当前页面时捕获和模拟不同域名下的 API 请求。由于前端开发常常涉及本地服务、测试环境、预发环境和生产域名，扩展需要覆盖这些请求来源。该权限不会修改系统 hosts 文件，也不会把请求数据上传到外部服务。
+用于在 DevTools 调试当前页面时捕获和模拟不同域名下的 API 请求，并在用户主动开启 Locator 拾取后读取被点击元素的稳定定位属性。由于前端开发常常涉及本地服务、测试环境、预发环境和生产域名，扩展需要覆盖这些请求来源。该权限不会修改系统 hosts 文件，也不会把请求数据或元素定位上传到外部服务。
 
 ### DevTools 面板
 
@@ -50,9 +51,9 @@ API Studio DevTools 是一款面向前端开发和测试场景的浏览器 DevTo
 ## 审核备注草稿
 
 ```text
-API Studio DevTools is a developer tool extension. It adds a DevTools panel for inspecting and replaying API requests, creating local mock rules, and debugging cookies or analytics beacons.
+API Studio DevTools is a developer tool extension. It adds a DevTools panel for inspecting and replaying API requests, creating local mock rules, debugging cookies or analytics beacons, and generating stable CSS/XPath locators for Selenium tests.
 
-The extension requests <all_urls> host permissions because developers need to debug API traffic across local, staging, and production domains from the currently inspected page. Request data is processed locally in the browser and is not sent to any external server by this extension.
+The extension requests <all_urls> host permissions because developers need to debug API traffic and explicitly pick DOM elements across local, staging, and production domains from the currently inspected page. Locator mode is activated by the user, does not read input values, and removes its event listeners after picking or cancellation. Request and locator data is processed locally in the browser and is not sent to any external server by this extension.
 
 The extension does not modify system hosts files and does not provide a remote code loading mechanism. All scripts are bundled inside the extension package.
 ```
@@ -62,6 +63,7 @@ The extension does not modify system hosts files and does not provide a remote c
 - DevTools 中 API Studio 的 Network 面板。
 - Replay 请求编辑器，展示请求体类型切换。
 - Mock 规则列表和命中计数。
+- Locator 元素高亮与 CSS/XPath 结果表格。
 - 深色模式界面。
 
 ## 提交前检查

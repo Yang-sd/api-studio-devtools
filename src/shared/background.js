@@ -3,6 +3,12 @@ if (typeof ApiStudioCompat === 'undefined' && typeof importScripts === 'function
 }
 
 // background 只负责持久化规则和命中数据；请求拦截发生在页面注入层。
+const pendingMockRecords = [];
+const pendingMockHitDeltas = {};
+const MAX_PENDING_MOCK_RECORDS = 30;
+let mockFlushTimer = null;
+let mockFlushInProgress = false;
+
 // 扩展安装时初始化
 chrome.runtime.onInstalled.addListener(async (details) => {
   if (details.reason === 'install') {
@@ -86,19 +92,49 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'RECORD_MOCK') {
-    storageGet('capturedRequests').then(async (result) => {
-      const list = result.capturedRequests || [];
-      const data = message.data || {};
-      list.unshift(data);
-      if (list.length > 30) {
-        list.length = 30;
-      }
-      await storageSet({ capturedRequests: list });
-      sendResponse({ success: true });
-    });
-    return true;
+    pendingMockRecords.push(message.data || {});
+    if (pendingMockRecords.length > MAX_PENDING_MOCK_RECORDS) pendingMockRecords.shift();
+    if (message.ruleId) pendingMockHitDeltas[message.ruleId] = (pendingMockHitDeltas[message.ruleId] || 0) + 1;
+    scheduleMockFlush();
+    sendResponse({ success: true, queued: true });
+    return false;
   }
 });
+
+function scheduleMockFlush() {
+  if (mockFlushTimer || mockFlushInProgress) return;
+  mockFlushTimer = setTimeout(flushMockRecords, 250);
+}
+
+async function flushMockRecords() {
+  mockFlushTimer = null;
+  if (mockFlushInProgress || pendingMockRecords.length === 0) return;
+  mockFlushInProgress = true;
+  const batch = pendingMockRecords.splice(0, pendingMockRecords.length);
+  const hitDeltas = { ...pendingMockHitDeltas };
+  Object.keys(hitDeltas).forEach(ruleId => delete pendingMockHitDeltas[ruleId]);
+  try {
+    const result = await storageGet(['capturedRequests', 'ruleHits']);
+    const list = batch.slice().reverse().concat(result.capturedRequests || []);
+    if (list.length > 30) list.length = 30;
+    const hits = result.ruleHits || {};
+    Object.keys(hitDeltas).forEach(ruleId => {
+      hits[ruleId] = (hits[ruleId] || 0) + hitDeltas[ruleId];
+    });
+    await storageSet({ capturedRequests: list, ruleHits: hits });
+  } catch (error) {
+    pendingMockRecords.unshift(...batch);
+    if (pendingMockRecords.length > MAX_PENDING_MOCK_RECORDS) {
+      pendingMockRecords.splice(0, pendingMockRecords.length - MAX_PENDING_MOCK_RECORDS);
+    }
+    Object.keys(hitDeltas).forEach(ruleId => {
+      pendingMockHitDeltas[ruleId] = (pendingMockHitDeltas[ruleId] || 0) + hitDeltas[ruleId];
+    });
+  } finally {
+    mockFlushInProgress = false;
+    if (pendingMockRecords.length) scheduleMockFlush();
+  }
+}
 
 function storageGet(keys) {
   return ApiStudioCompat.storageGet(keys);
