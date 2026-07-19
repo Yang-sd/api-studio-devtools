@@ -63,7 +63,12 @@
   var locatorPicking = false;
   var locatorSessionId = '';
   var locatorStatusState = 'ready';
+  var locatorSearchQuery = '';
+  var locatorCodeLanguage = 'python';
+  var locatorVerificationById = new Map();
+  var locatorVerificationRequests = new Map();
   var MAX_LOCATOR_HISTORY = 100;
+  var LOCATOR_VERIFY_TIMEOUT_MS = 1800;
 
   // ====== DOM ======
   var $ = function(id) { return document.getElementById(id); };
@@ -212,8 +217,13 @@
   var locatorStatus = $('locatorStatus');
   var locatorContinuous = $('locatorContinuous');
   var locatorClearBtn = $('locatorClearBtn');
+  var locatorSearchInput = $('locatorSearchInput');
+  var locatorCount = $('locatorCount');
+  var locatorLanguageSelect = $('locatorLanguageSelect');
   var locatorTableBody = $('locatorTableBody');
   var locatorEmpty = $('locatorEmpty');
+  var locatorEmptyTitle = $('locatorEmptyTitle');
+  var locatorEmptyHint = $('locatorEmptyHint');
   // QR
   var qrInput = $('qrInput');
   var qrCanvas = $('qrCanvas');
@@ -288,6 +298,7 @@
       'common.move': '转移',
       'common.save': '保存',
       'common.cancel': '取消',
+      'common.close': '关闭',
       'common.confirm': '确定',
       'common.empty': '无',
       'common.notSent': '(尚未发送)',
@@ -392,27 +403,91 @@
       'locator.ready': '点击拾取后，到页面中选择输入框、按钮或其他元素。',
       'locator.picking': '正在拾取：移动到页面元素上并点击，按 Esc 取消。',
       'locator.picked': '已获取 {element} 的稳定定位。',
+      'locator.pickedUnavailable': '已识别 {element}，但当前页面没有唯一且可靠的定位。',
       'locator.unsupported': '当前页面无法启动拾取，请刷新页面后重试；浏览器内部页面不支持此功能。',
       'locator.failed': '定位生成失败：{message}',
       'locator.continuous': '连续拾取',
       'locator.continuousTitle': '开启后可连续选择多个元素',
       'locator.policy': '只生成经过唯一性验证的稳定定位；不会生成 nth-child、绝对数字 XPath 或屏幕坐标。',
       'locator.element': '元素',
-      'locator.recommended': '推荐定位',
+      'locator.recommended': '定位推荐',
       'locator.context': '上下文',
       'locator.actions': '操作',
       'locator.emptyTitle': '还没有拾取元素',
       'locator.emptyHint': '点击“拾取元素”，然后在被调试页面中点击目标控件。',
+      'locator.noResultsTitle': '没有匹配的定位记录',
+      'locator.noResultsHint': '换一个元素名称、页面地址或选择器关键字。',
+      'locator.searchPlaceholder': '搜索元素、页面或定位',
+      'locator.languageTitle': 'Selenium 代码语言',
+      'locator.count': '{visible} / {total}',
+      'locator.rankBest': '最优',
+      'locator.rankBackup': '备选',
+      'locator.rankFallback': '兜底',
+      'locator.score': '{score} 分',
+      'locator.uniqueMatch': '唯一命中 1 个元素，且已验证为当前选中元素。',
+      'locator.contextMatch': '基础条件命中 {count} 个元素；结合 {context} 后唯一命中当前选中元素。',
+      'locator.relativeContext': '稳定祖先',
+      'locator.rowContext': '{tag} 容器内的唯一关联元素',
+      'locator.scoreDirect': '基础分 {base}，无组合扣分，最终 {score} 分。',
+      'locator.scorePenalty': '基础分 {base} - 组合依赖 {penalty} = {score} 分。',
+      'locator.strategy.data-testid': '测试属性 data-testid',
+      'locator.strategy.data-test': '测试属性 data-test',
+      'locator.strategy.data-qa': '测试属性 data-qa',
+      'locator.strategy.data-cy': '测试属性 data-cy',
+      'locator.strategy.data-e2e': '测试属性 data-e2e',
+      'locator.strategy.id': '稳定 ID',
+      'locator.strategy.name': 'Name 属性',
+      'locator.strategy.aria-label': 'ARIA 标签',
+      'locator.strategy.role': '语义角色',
+      'locator.strategy.placeholder': '占位文案',
+      'locator.strategy.alt': '替代文本',
+      'locator.strategy.for': '表单关联',
+      'locator.strategy.data-attribute': '业务 data 属性',
+      'locator.strategy.autocomplete': '自动填充属性',
+      'locator.strategy.text': '精确文本',
+      'locator.strategy.stable-class': '稳定 Class',
+      'locator.strategy.attributes': '属性组合',
+      'locator.strategy.title': 'Title 属性',
+      'locator.strategy.href': '链接地址',
+      'locator.strategy.type': '控件类型',
+      'locator.strategy.tag': '唯一标签',
       'locator.copy': '复制',
       'locator.copySuccess': '定位已复制',
+      'locator.copySelenium': '复制代码',
+      'locator.copySeleniumSuccess': 'Selenium 代码已复制',
+      'locator.copySeleniumFailed': '当前记录没有可用的 Selenium 定位代码',
+      'locator.verify': '验证',
+      'locator.verifyChecking': '验证中',
+      'locator.verifyValid': '当前有效',
+      'locator.verifyInvalid': '当前失效',
+      'locator.verifySuccess': '定位有效，已在页面中高亮。',
+      'locator.verifyFailed': '当前页面没有找到唯一匹配元素。',
+      'locator.confidenceHigh': '高稳定性',
+      'locator.confidenceMedium': '中稳定性',
+      'locator.confidenceLow': '低稳定性',
+      'locator.confidenceMissing': '不可用',
+      'locator.confidenceReason.stableAttribute': '依赖稳定测试属性、id、name 或语义属性。',
+      'locator.confidenceReason.relative': '依赖祖先和目标的组合结构。',
+      'locator.confidenceReason.contextual': '基础条件重复，通过同一容器内的稳定关联元素消除歧义。',
+      'locator.confidenceReason.attributeCombination': '依赖多个属性共同保持不变。',
+      'locator.confidenceReason.text': '依赖页面可见文案。',
+      'locator.confidenceReason.class': '依赖样式 class，样式重构后可能变化。',
+      'locator.confidenceReason.fragileAttribute': '依赖可能随业务变化的普通属性。',
+      'locator.confidenceReason.tag': '仅依赖标签唯一性，页面增加同类元素后会失效。',
+      'locator.confidenceReason.missing': '没有唯一且可靠的定位。',
       'locator.delete': '删除',
       'locator.topFrame': '顶层页面',
       'locator.iframe': 'iframe',
       'locator.shadow': 'Shadow DOM',
       'locator.noStable': '未找到稳定且唯一的定位，请为元素补充 data-testid、id 或 name。',
+      'locator.noStableCss': '没有可靠的无序号 CSS，请使用推荐 XPath。',
+      'locator.noStableXpath': '没有可靠 XPath，请使用推荐 CSS。',
       'locator.noXpathShadow': 'Shadow DOM 内不能使用普通全局 XPath。',
       'locator.textWarning': 'XPath 依赖文本，页面文案变化后可能失效。',
       'locator.frameWarning': 'Selenium 使用前需要先切换到对应 iframe。',
+      'locator.frameIncompleteWarning': '部分跨域 iframe 无法读取父级元素，需要在生成代码的 TODO 位置手动补充切换。',
+      'locator.frameChain': 'iframe × {count}',
+      'locator.frameLevel': '第 {level} 层',
       'locator.shadowWarning': 'Selenium 4 需要逐层进入 Shadow Root。',
       'locator.deleted': '已删除元素定位',
       'locator.cleared': '已清空元素定位',
@@ -546,6 +621,7 @@
       'common.move': 'Move',
       'common.save': 'Save',
       'common.cancel': 'Cancel',
+      'common.close': 'Close',
       'common.confirm': 'OK',
       'common.empty': 'None',
       'common.notSent': '(Not sent yet)',
@@ -650,6 +726,7 @@
       'locator.ready': 'Start picking, then select an input, button, or other element on the inspected page.',
       'locator.picking': 'Picking: point to a page element and click. Press Esc to cancel.',
       'locator.picked': 'Stable locator captured for {element}.',
+      'locator.pickedUnavailable': '{element} was identified, but no unique reliable locator is available on this page.',
       'locator.unsupported': 'Picking could not start on this page. Refresh and retry; browser internal pages are unsupported.',
       'locator.failed': 'Locator generation failed: {message}',
       'locator.continuous': 'Continuous',
@@ -661,16 +738,79 @@
       'locator.actions': 'Actions',
       'locator.emptyTitle': 'No elements picked yet',
       'locator.emptyHint': 'Click Pick element, then click the target control on the inspected page.',
+      'locator.noResultsTitle': 'No matching locator records',
+      'locator.noResultsHint': 'Try an element name, page URL, or selector keyword.',
+      'locator.searchPlaceholder': 'Search elements, pages, or locators',
+      'locator.languageTitle': 'Selenium code language',
+      'locator.count': '{visible} / {total}',
+      'locator.rankBest': 'Best',
+      'locator.rankBackup': 'Alternative',
+      'locator.rankFallback': 'Fallback',
+      'locator.score': '{score} pts',
+      'locator.uniqueMatch': 'Uniquely matches one element and was verified as the selected element.',
+      'locator.contextMatch': 'The base condition matches {count} elements; adding {context} uniquely identifies the selected element.',
+      'locator.relativeContext': 'a stable ancestor',
+      'locator.rowContext': 'a unique related element in the {tag} container',
+      'locator.scoreDirect': 'Base {base}, no composition penalty, final score {score}.',
+      'locator.scorePenalty': 'Base {base} - composition penalty {penalty} = {score}.',
+      'locator.strategy.data-testid': 'Test attribute data-testid',
+      'locator.strategy.data-test': 'Test attribute data-test',
+      'locator.strategy.data-qa': 'Test attribute data-qa',
+      'locator.strategy.data-cy': 'Test attribute data-cy',
+      'locator.strategy.data-e2e': 'Test attribute data-e2e',
+      'locator.strategy.id': 'Stable ID',
+      'locator.strategy.name': 'Name attribute',
+      'locator.strategy.aria-label': 'ARIA label',
+      'locator.strategy.role': 'Semantic role',
+      'locator.strategy.placeholder': 'Placeholder text',
+      'locator.strategy.alt': 'Alternative text',
+      'locator.strategy.for': 'Form association',
+      'locator.strategy.data-attribute': 'Business data attribute',
+      'locator.strategy.autocomplete': 'Autocomplete attribute',
+      'locator.strategy.text': 'Exact text',
+      'locator.strategy.stable-class': 'Stable class',
+      'locator.strategy.attributes': 'Attribute combination',
+      'locator.strategy.title': 'Title attribute',
+      'locator.strategy.href': 'Link URL',
+      'locator.strategy.type': 'Control type',
+      'locator.strategy.tag': 'Unique tag',
       'locator.copy': 'Copy',
       'locator.copySuccess': 'Locator copied',
+      'locator.copySelenium': 'Copy code',
+      'locator.copySeleniumSuccess': 'Selenium code copied',
+      'locator.copySeleniumFailed': 'No usable Selenium locator code is available for this record',
+      'locator.verify': 'Verify',
+      'locator.verifyChecking': 'Checking',
+      'locator.verifyValid': 'Valid now',
+      'locator.verifyInvalid': 'Invalid now',
+      'locator.verifySuccess': 'The locator is valid and highlighted on the page.',
+      'locator.verifyFailed': 'No unique matching element was found on the current page.',
+      'locator.confidenceHigh': 'High stability',
+      'locator.confidenceMedium': 'Medium stability',
+      'locator.confidenceLow': 'Low stability',
+      'locator.confidenceMissing': 'Unavailable',
+      'locator.confidenceReason.stableAttribute': 'Uses a stable test attribute, id, name, or semantic attribute.',
+      'locator.confidenceReason.relative': 'Depends on a combined ancestor and target structure.',
+      'locator.confidenceReason.contextual': 'The base condition repeats, so a stable related element in the same container removes ambiguity.',
+      'locator.confidenceReason.attributeCombination': 'Depends on several attributes remaining unchanged together.',
+      'locator.confidenceReason.text': 'Depends on visible page copy.',
+      'locator.confidenceReason.class': 'Depends on CSS classes that may change during a style refactor.',
+      'locator.confidenceReason.fragileAttribute': 'Depends on a regular attribute that may change with business behavior.',
+      'locator.confidenceReason.tag': 'Depends only on tag uniqueness and may break when a similar element is added.',
+      'locator.confidenceReason.missing': 'No unique, reliable locator is available.',
       'locator.delete': 'Delete',
       'locator.topFrame': 'Top frame',
       'locator.iframe': 'iframe',
       'locator.shadow': 'Shadow DOM',
       'locator.noStable': 'No stable unique locator was found. Add data-testid, id, or name to this element.',
+      'locator.noStableCss': 'No reliable non-positional CSS was found. Use the recommended XPath.',
+      'locator.noStableXpath': 'No reliable XPath was found. Use the recommended CSS.',
       'locator.noXpathShadow': 'Regular global XPath cannot cross a Shadow DOM boundary.',
       'locator.textWarning': 'This XPath depends on visible text and may break when copy changes.',
       'locator.frameWarning': 'Switch to the corresponding iframe before using this locator in Selenium.',
+      'locator.frameIncompleteWarning': 'Some cross-origin parent frames are inaccessible. Complete the switch at the TODO marker in generated code.',
+      'locator.frameChain': 'iframe × {count}',
+      'locator.frameLevel': 'Level {level}',
       'locator.shadowWarning': 'Selenium 4 must enter each Shadow Root in sequence.',
       'locator.deleted': 'Element locator deleted',
       'locator.cleared': 'Element locators cleared',
@@ -976,9 +1116,12 @@
     setSelectorText('#detailContent .detail-header h3', 'network.detailTitle');
     updateNetworkCaptureControls();
     setElementText('locatorClearBtn', 'common.clear');
+    setElementPlaceholder('locatorSearchInput', 'locator.searchPlaceholder');
+    setElementTitle('locatorLanguageSelect', 'locator.languageTitle');
     var locatorContinuousWrap = locatorContinuous ? locatorContinuous.closest('.locator-continuous') : null;
     if (locatorContinuousWrap) locatorContinuousWrap.title = t('locator.continuousTitle');
     updateLocatorControls();
+    renderLocatorTable();
 
     setElementPlaceholder('beaconPathInput', 'beacon.pathPlaceholder');
     setElementText('addBeaconConditionBtn', 'beacon.addCondition');
@@ -6496,9 +6639,16 @@
     catch (error) { return 0; }
   }
 
+  function loadLocatorPreferences() {
+    try { locatorCodeLanguage = localStorage.getItem('apiStudioLocatorLanguage') || 'python'; }
+    catch (error) { locatorCodeLanguage = 'python'; }
+    if (['python', 'java', 'javascript'].indexOf(locatorCodeLanguage) === -1) locatorCodeLanguage = 'python';
+    if (locatorLanguageSelect) locatorLanguageSelect.value = locatorCodeLanguage;
+  }
+
   function loadLocatorHistory() {
-    ApiStudioCompat.storageGet('locatorHistory').then(function(result) {
-      locatorHistory = (result.locatorHistory || []).map(normalizeLocatorResult).filter(Boolean).slice(0, MAX_LOCATOR_HISTORY);
+    ApiStudioCompat.storageGet(['locatorHistory']).then(function(result) {
+      locatorHistory = dedupeLocatorHistory((result.locatorHistory || []).map(normalizeLocatorResult).filter(Boolean)).slice(0, MAX_LOCATOR_HISTORY);
       renderLocatorTable();
     }).catch(function() {
       locatorHistory = [];
@@ -6577,6 +6727,19 @@
     if (!message || String(message.type || '').indexOf('__API_STUDIO_LOCATOR_') !== 0) return false;
     var senderTabId = sender && sender.tab ? Number(sender.tab.id) : 0;
     if (senderTabId && senderTabId !== getInspectedTabId()) return false;
+
+    // 验证与拾取使用独立生命周期，历史记录验证不依赖当前是否正在拾取。
+    if (message.type === '__API_STUDIO_LOCATOR_VERIFIED__') {
+      var pendingVerification = locatorVerificationRequests.get(String(message.requestId || ''));
+      if (!pendingVerification || message.success !== true) return false;
+      clearTimeout(pendingVerification.timer);
+      locatorVerificationRequests.delete(String(message.requestId || ''));
+      locatorVerificationById.set(pendingVerification.locatorId, 'valid');
+      renderLocatorTable();
+      setLocatorStatus(t('locator.verifySuccess'), 'ready');
+      return false;
+    }
+
     if (!locatorSessionId || message.sessionId !== locatorSessionId) return false;
 
     if (message.type === '__API_STUDIO_LOCATOR_PICKED__') {
@@ -6585,14 +6748,15 @@
         setLocatorStatus(t('locator.failed', { message: 'INVALID_RESULT' }), 'error');
         return false;
       }
-      locatorHistory.unshift(item);
+      upsertLocatorHistoryItem(item);
       if (locatorHistory.length > MAX_LOCATOR_HISTORY) locatorHistory.length = MAX_LOCATOR_HISTORY;
       persistLocatorHistory();
       renderLocatorTable();
 
       var continuous = !!(locatorContinuous && locatorContinuous.checked);
       if (!continuous) stopLocatorPicker({ preserveStatus: true });
-      setLocatorStatus(t('locator.picked', { element: item.elementLabel || '<' + item.tagName + '>' }), continuous ? 'picking' : 'ready');
+      var pickedMessageKey = item.recommended ? 'locator.picked' : 'locator.pickedUnavailable';
+      setLocatorStatus(t(pickedMessageKey, { element: item.elementLabel || '<' + item.tagName + '>' }), item.recommended ? (continuous ? 'picking' : 'ready') : 'error');
       return false;
     }
 
@@ -6611,6 +6775,43 @@
 
   chrome.runtime.onMessage.addListener(handleLocatorRuntimeMessage);
 
+  function upsertLocatorHistoryItem(item) {
+    var key = getLocatorHistoryKey(item);
+    var existingIndex = locatorHistory.findIndex(function(entry) { return getLocatorHistoryKey(entry) === key; });
+    if (existingIndex >= 0) {
+      var existing = locatorHistory.splice(existingIndex, 1)[0];
+      item.id = existing.id;
+      locatorVerificationById.delete(existing.id);
+    }
+    locatorHistory.unshift(item);
+  }
+
+  function dedupeLocatorHistory(items) {
+    var seen = Object.create(null);
+    return items.filter(function(item) {
+      var key = getLocatorHistoryKey(item);
+      if (seen[key]) return false;
+      seen[key] = true;
+      return true;
+    });
+  }
+
+  function getLocatorHistoryKey(item) {
+    var frame = item.frame || {};
+    var shadow = item.shadow || {};
+    var locator = item.recommended || item.css || item.xpath || item.elementLabel || item.tagName;
+    var frameChainKey = Array.isArray(frame.chain) ? frame.chain.map(function(entry) {
+      return [entry.url, entry.name, entry.css, entry.xpath].join('|');
+    }).join('>') : '';
+    return [
+      item.pageUrl || frame.url || '',
+      frame.isTopFrame === false ? 'frame:' + (frame.depth || 1) + ':' + frameChainKey : 'top',
+      shadow.cssChain || '',
+      item.recommendedType || (item.css ? 'css' : 'xpath'),
+      locator || ''
+    ].join('\n');
+  }
+
   function normalizeLocatorResult(value) {
     if (!value || typeof value !== 'object') return null;
     var frame = value.frame && typeof value.frame === 'object' ? value.frame : {};
@@ -6625,17 +6826,30 @@
     var warnings = Array.isArray(value.warnings) ? value.warnings.map(function(item) {
       return safeLocatorString(item, 80);
     }).filter(Boolean).slice(0, 8) : [];
+    var frameChain = Array.isArray(frame.chain) ? frame.chain.slice(0, 8).map(normalizeLocatorFrameEntry) : [];
+    if (frame.isTopFrame === false && !frameChain.length) frameChain.push(normalizeLocatorFrameEntry(frame));
+    var frameDepth = Math.max(0, Math.min(8, Number(frame.depth || frameChain.length || (frame.isTopFrame === false ? 1 : 0))));
+    while (frameChain.length < frameDepth) frameChain.unshift(normalizeLocatorFrameEntry({}));
+    var frameComplete = frame.isTopFrame !== false || (frame.complete !== false && frameChain.length === frameDepth && frameChain.every(function(entry) {
+      return !!(entry.css || entry.xpath);
+    }));
 
-    return {
+    var normalized = {
       id: safeLocatorString(value.id, 120) || ('locator_' + Date.now() + '_' + random(6)),
       tagName: safeLocatorString(value.tagName, 80) || 'element',
       elementLabel: safeLocatorString(value.elementLabel, 240),
       css: safeLocatorString(value.css, 2000),
       cssStrategy: safeLocatorString(value.cssStrategy, 100),
+      cssScore: normalizeLocatorScore(value.cssScore),
       xpath: safeLocatorString(value.xpath, 3000),
       xpathStrategy: safeLocatorString(value.xpathStrategy, 100),
+      xpathScore: normalizeLocatorScore(value.xpathScore),
       recommended: safeLocatorString(value.recommended, 3000),
       recommendedType: value.recommendedType === 'xpath' ? 'xpath' : (value.recommendedType === 'css' ? 'css' : ''),
+      recommendedScore: normalizeLocatorScore(value.recommendedScore),
+      confidence: '',
+      confidenceReason: '',
+      alternatives: [],
       unique: value.unique === true,
       warnings: warnings,
       frame: {
@@ -6643,7 +6857,10 @@
         url: safeLocatorString(frame.url, 2000),
         name: safeLocatorString(frame.name, 240),
         css: safeLocatorString(frame.css, 2000),
-        xpath: safeLocatorString(frame.xpath, 3000)
+        xpath: safeLocatorString(frame.xpath, 3000),
+        depth: frameDepth,
+        complete: frameComplete,
+        chain: frameChain
       },
       shadow: {
         hosts: hosts,
@@ -6653,6 +6870,110 @@
       pageUrl: safeLocatorString(value.pageUrl, 2000),
       capturedAt: normalizeLocatorTimestamp(value.capturedAt)
     };
+    var alternatives = Array.isArray(value.alternatives) ? value.alternatives.map(normalizeLocatorAlternative).filter(Boolean).slice(0, 12) : [];
+    if (!alternatives.length && normalized.recommended) {
+      var legacyStrategy = normalized.recommendedType === 'xpath' ? normalized.xpathStrategy : normalized.cssStrategy;
+      alternatives.push(normalizeLocatorAlternative({
+        type: normalized.recommendedType,
+        selector: normalized.recommended,
+        strategy: legacyStrategy,
+        score: normalized.recommendedScore,
+        confidence: value.confidence,
+        confidenceReason: value.confidenceReason,
+        unique: true,
+        matchCount: 1,
+        baseMatchCount: 1,
+        reasonCode: 'direct'
+      }));
+    }
+    alternatives = alternatives.filter(Boolean).sort(compareLocatorAlternatives).slice(0, 3);
+    normalized.alternatives = alternatives;
+    if (alternatives.length) {
+      normalized.recommended = alternatives[0].selector;
+      normalized.recommendedType = alternatives[0].type;
+      normalized.recommendedScore = alternatives[0].score;
+      normalized.confidence = alternatives[0].confidence;
+      normalized.confidenceReason = alternatives[0].confidenceReason;
+      normalized.unique = true;
+      return normalized;
+    }
+
+    var strategy = normalized.recommendedType === 'xpath' ? normalized.xpathStrategy : normalized.cssStrategy;
+    var strategyScore = normalized.recommendedScore || (normalized.recommendedType === 'xpath' ? normalized.xpathScore : normalized.cssScore);
+    var engine = globalThis.ApiStudioLocatorEngine;
+    var rating = engine && typeof engine.rateStrategy === 'function'
+      ? engine.rateStrategy(strategy, strategyScore)
+      : { level: normalized.recommended ? 'medium' : 'missing', reason: normalized.recommended ? 'stableAttribute' : 'missing', score: strategyScore };
+    normalized.recommendedScore = normalizeLocatorScore(rating.score);
+    normalized.confidence = ['high', 'medium', 'low', 'missing'].indexOf(value.confidence) !== -1 ? value.confidence : rating.level;
+    normalized.confidenceReason = safeLocatorConfidenceReason(value.confidenceReason) || rating.reason;
+    return normalized;
+  }
+
+  function normalizeLocatorAlternative(value) {
+    if (!value || typeof value !== 'object') return null;
+    var type = value.type === 'xpath' ? 'xpath' : (value.type === 'css' ? 'css' : '');
+    var selector = safeLocatorString(value.selector, type === 'xpath' ? 3000 : 2000);
+    var matchCount = Math.max(0, Math.min(100000, Math.round(Number(value.matchCount || 1))));
+    if (!type || !selector || value.unique === false || matchCount !== 1) return null;
+    var strategy = safeLocatorString(value.strategy, 100);
+    var reasonCode = ['direct', 'relative', 'contextual'].indexOf(value.reasonCode) !== -1 ? value.reasonCode : 'direct';
+    var score = normalizeLocatorScore(value.score);
+    var engine = globalThis.ApiStudioLocatorEngine;
+    var rating = engine && typeof engine.rateStrategy === 'function'
+      ? engine.rateStrategy(strategy, score, reasonCode)
+      : { level: score >= 85 ? 'high' : (score >= 45 ? 'medium' : 'low'), reason: reasonCode === 'direct' ? 'stableAttribute' : reasonCode, score: score };
+    return {
+      type: type,
+      selector: selector,
+      strategy: strategy,
+      score: normalizeLocatorScore(rating.score || score),
+      confidence: ['high', 'medium', 'low'].indexOf(value.confidence) !== -1 ? value.confidence : rating.level,
+      confidenceReason: safeLocatorConfidenceReason(value.confidenceReason) || rating.reason,
+      unique: true,
+      matchCount: 1,
+      baseSelector: safeLocatorString(value.baseSelector || selector, type === 'xpath' ? 3000 : 2000),
+      baseScore: normalizeLocatorScore(value.baseScore || score),
+      baseMatchCount: Math.max(1, Math.min(100000, Math.round(Number(value.baseMatchCount || 1)))),
+      anchorSelector: safeLocatorString(value.anchorSelector, 3000),
+      anchorStrategy: safeLocatorString(value.anchorStrategy, 100),
+      anchorMatchCount: Math.max(0, Math.min(100000, Math.round(Number(value.anchorMatchCount || 0)))),
+      scopeSelector: safeLocatorString(value.scopeSelector, 3000),
+      containerTag: safeLocatorString(value.containerTag, 80),
+      penalty: normalizeLocatorScore(value.penalty),
+      contextDepth: Math.max(0, Math.min(6, Math.round(Number(value.contextDepth || 0)))),
+      reasonCode: reasonCode
+    };
+  }
+
+  function compareLocatorAlternatives(left, right) {
+    if (right.score !== left.score) return right.score - left.score;
+    var weight = { direct: 3, relative: 2, contextual: 1 };
+    var reasonDifference = (weight[right.reasonCode] || 0) - (weight[left.reasonCode] || 0);
+    if (reasonDifference) return reasonDifference;
+    if (left.type !== right.type) return left.type === 'css' ? -1 : 1;
+    return left.selector.length - right.selector.length;
+  }
+
+  function normalizeLocatorFrameEntry(frame) {
+    frame = frame && typeof frame === 'object' ? frame : {};
+    return {
+      url: safeLocatorString(frame.url, 2000),
+      name: safeLocatorString(frame.name, 240),
+      css: safeLocatorString(frame.css, 2000),
+      xpath: safeLocatorString(frame.xpath, 3000),
+      accessible: frame.accessible === true || !!(frame.css || frame.xpath)
+    };
+  }
+
+  function normalizeLocatorScore(value) {
+    var score = Number(value || 0);
+    return isFinite(score) ? Math.max(0, Math.min(100, score)) : 0;
+  }
+
+  function safeLocatorConfidenceReason(value) {
+    value = String(value || '');
+    return ['stableAttribute', 'relative', 'contextual', 'attributeCombination', 'text', 'class', 'fragileAttribute', 'tag', 'missing'].indexOf(value) !== -1 ? value : '';
   }
 
   function safeLocatorString(value, maxLength) {
@@ -6667,17 +6988,44 @@
 
   function renderLocatorTable() {
     if (!locatorTableBody || activeTabName !== 'locator') return;
-    if (locatorEmpty) locatorEmpty.style.display = locatorHistory.length ? 'none' : 'flex';
-    locatorTableBody.innerHTML = locatorHistory.map(function(item) {
+    var filteredHistory = getFilteredLocatorHistory();
+    if (locatorCount) locatorCount.textContent = t('locator.count', { visible: filteredHistory.length, total: locatorHistory.length });
+    if (locatorEmpty) locatorEmpty.style.display = filteredHistory.length ? 'none' : 'flex';
+    if (locatorEmptyTitle) locatorEmptyTitle.textContent = t(locatorHistory.length ? 'locator.noResultsTitle' : 'locator.emptyTitle');
+    if (locatorEmptyHint) locatorEmptyHint.textContent = t(locatorHistory.length ? 'locator.noResultsHint' : 'locator.emptyHint');
+    locatorTableBody.innerHTML = filteredHistory.map(function(item) {
       return '<tr data-locator-id="' + escAttr(item.id) + '">' +
         '<td class="locator-col-element">' + renderLocatorElementCell(item) + '</td>' +
-        '<td class="locator-col-recommended">' + renderLocatorCodeCell(item, 'recommended', item.recommendedType) + '</td>' +
-        '<td class="locator-col-css">' + renderLocatorCodeCell(item, 'css', item.cssStrategy) + '</td>' +
-        '<td class="locator-col-xpath">' + renderLocatorCodeCell(item, 'xpath', item.xpathStrategy) + '</td>' +
+        '<td class="locator-col-recommended">' + renderLocatorAlternatives(item) + '</td>' +
         '<td class="locator-col-context">' + renderLocatorContextCell(item) + '</td>' +
-        '<td class="locator-col-actions"><div class="locator-row-actions"><button class="btn btn-secondary btn-sm" type="button" data-action="delete-locator">' + escHtml(t('locator.delete')) + '</button></div></td>' +
+        '<td class="locator-col-actions">' + renderLocatorActions(item) + '</td>' +
       '</tr>';
     }).join('');
+  }
+
+  function getFilteredLocatorHistory() {
+    var query = String(locatorSearchQuery || '').trim().toLowerCase();
+    if (!query) return locatorHistory;
+    return locatorHistory.filter(function(item) {
+      var frame = item.frame || {};
+      var frameChainText = Array.isArray(frame.chain) ? frame.chain.map(function(entry) {
+        return [entry.url, entry.name, entry.css, entry.xpath].join(' ');
+      }).join(' ') : '';
+      return [
+        item.elementLabel,
+        item.tagName,
+        item.pageUrl,
+        item.css,
+        item.xpath,
+        item.recommended,
+        (item.alternatives || []).map(function(candidate) {
+          return [candidate.selector, candidate.baseSelector, candidate.anchorSelector, candidate.strategy].join(' ');
+        }).join(' '),
+        frame.url,
+        frame.name,
+        frameChainText
+      ].some(function(value) { return String(value || '').toLowerCase().indexOf(query) !== -1; });
+    });
   }
 
   function renderLocatorElementCell(item) {
@@ -6688,16 +7036,79 @@
       renderLocatorWarnings(item);
   }
 
-  function renderLocatorCodeCell(item, field, strategy) {
-    var value = getLocatorField(item, field);
-    if (!value) {
-      var emptyMessage = field === 'xpath' && item.shadow.hosts.length ? t('locator.noXpathShadow') : t('locator.noStable');
-      return '<div class="locator-unavailable">' + escHtml(emptyMessage) + '</div>';
+  function renderLocatorAlternatives(item) {
+    var alternatives = Array.isArray(item.alternatives) ? item.alternatives.slice(0, 3) : [];
+    if (!alternatives.length) return '<div class="locator-unavailable">' + escHtml(t('locator.noStable')) + '</div>';
+    return '<div class="locator-candidate-list">' + alternatives.map(renderLocatorCandidate).join('') + '</div>';
+  }
+
+  function renderLocatorCandidate(candidate, index) {
+    var rankKey = ['locator.rankBest', 'locator.rankBackup', 'locator.rankFallback'][index] || 'locator.rankFallback';
+    var confidence = ['high', 'medium', 'low'].indexOf(candidate.confidence) !== -1 ? candidate.confidence : 'low';
+    var strategy = locatorStrategyLabel(candidate.strategy);
+    var reasonKey = 'locator.confidenceReason.' + (safeLocatorConfidenceReason(candidate.confidenceReason) || 'missing');
+    var matchText;
+    if (candidate.reasonCode === 'direct' || candidate.baseMatchCount <= 1) {
+      matchText = t('locator.uniqueMatch');
+    } else {
+      var context = candidate.reasonCode === 'contextual'
+        ? t('locator.rowContext', { tag: candidate.containerTag || 'DOM' })
+        : t('locator.relativeContext');
+      matchText = t('locator.contextMatch', { count: candidate.baseMatchCount, context: context });
     }
-    var label = field === 'recommended' ? (item.recommendedType || strategy || '-') : (strategy || field);
-    return '<span class="locator-strategy">' + escHtml(label) + '</span>' +
-      '<div class="locator-code-wrap"><code class="locator-code">' + escHtml(value) + '</code>' +
-      '<button class="btn btn-secondary locator-copy-btn" type="button" data-action="copy-locator" data-field="' + escAttr(field) + '" title="' + escAttr(t('locator.copy')) + '" aria-label="' + escAttr(t('locator.copy')) + '">⧉</button></div>';
+    var scoreText = candidate.penalty > 0
+      ? t('locator.scorePenalty', { base: candidate.baseScore, penalty: candidate.penalty, score: candidate.score })
+      : t('locator.scoreDirect', { base: candidate.baseScore, score: candidate.score });
+    return '<section class="locator-candidate locator-candidate-' + index + '">' +
+      '<div class="locator-candidate-head">' +
+        '<span class="locator-rank locator-rank-' + index + '">' + escHtml(t(rankKey)) + '</span>' +
+        '<span class="locator-strategy">' + escHtml(candidate.type.toUpperCase() + ' · ' + strategy) + '</span>' +
+        renderLocatorConfidence(candidate) +
+        '<span class="locator-score">' + escHtml(t('locator.score', { score: candidate.score })) + '</span>' +
+      '</div>' +
+      '<div class="locator-code-wrap"><code class="locator-code">' + escHtml(candidate.selector) + '</code>' +
+        '<button class="btn btn-secondary locator-copy-btn" type="button" data-action="copy-locator" data-field="alternative:' + index + '" title="' + escAttr(t('locator.copy')) + '" aria-label="' + escAttr(t('locator.copy')) + '">⧉</button></div>' +
+      '<div class="locator-candidate-reason">' + escHtml(t(reasonKey)) + '</div>' +
+      '<div class="locator-candidate-proof">' + escHtml(matchText) + ' ' + escHtml(scoreText) + '</div>' +
+    '</section>';
+  }
+
+  function locatorStrategyLabel(strategy) {
+    var directStrategy = String(strategy || '').replace(/^(relative-|contextual-)/, '');
+    var key = 'locator.strategy.' + directStrategy;
+    var label = t(key);
+    return label && label !== key ? label : (directStrategy || strategy || 'locator');
+  }
+
+  function renderLocatorConfidence(candidate) {
+    var confidence = ['high', 'medium', 'low', 'missing'].indexOf(candidate.confidence) !== -1 ? candidate.confidence : 'missing';
+    var labelKey = {
+      high: 'locator.confidenceHigh',
+      medium: 'locator.confidenceMedium',
+      low: 'locator.confidenceLow',
+      missing: 'locator.confidenceMissing'
+    }[confidence];
+    var reasonKey = 'locator.confidenceReason.' + (safeLocatorConfidenceReason(candidate.confidenceReason) || 'missing');
+    return '<span class="locator-confidence ' + confidence + '" title="' + escAttr(t(reasonKey)) + '">' + escHtml(t(labelKey)) + '</span>';
+  }
+
+  function renderLocatorActions(item) {
+    var verificationState = locatorVerificationById.get(item.id) || '';
+    var disabled = item.recommended ? '' : ' disabled';
+    return '<div class="locator-row-actions">' +
+      '<button class="btn btn-secondary btn-sm" type="button" data-action="verify-locator"' + disabled + '>' + escHtml(t('locator.verify')) + '</button>' +
+      '<button class="btn btn-secondary btn-sm" type="button" data-action="copy-selenium"' + disabled + '>' + escHtml(t('locator.copySelenium')) + '</button>' +
+      '<button class="btn btn-secondary btn-sm" type="button" data-action="delete-locator">' + escHtml(t('locator.delete')) + '</button>' +
+      '</div>' + renderLocatorVerificationState(verificationState);
+  }
+
+  function renderLocatorVerificationState(state) {
+    var key = {
+      checking: 'locator.verifyChecking',
+      valid: 'locator.verifyValid',
+      invalid: 'locator.verifyInvalid'
+    }[state];
+    return key ? '<span class="locator-verify-state ' + state + '">' + escHtml(t(key)) + '</span>' : '';
   }
 
   function renderLocatorContextCell(item) {
@@ -6705,9 +7116,16 @@
     if (item.frame.isTopFrame) {
       parts.push('<span class="locator-context-badge">' + escHtml(t('locator.topFrame')) + '</span>');
     } else {
-      parts.push('<span class="locator-context-badge" title="' + escAttr(item.frame.url || '') + '">' + escHtml(t('locator.iframe')) + ': ' + escHtml(item.frame.name || shortLocatorUrl(item.frame.url) || '-') + '</span>');
-      if (item.frame.css) parts.push(renderLocatorContextCode('frameCss', item.frame.css));
-      else if (item.frame.xpath) parts.push(renderLocatorContextCode('frameXPath', item.frame.xpath));
+      var frameChain = Array.isArray(item.frame.chain) ? item.frame.chain : [];
+      var frameCount = item.frame.depth || frameChain.length || 1;
+      parts.push('<span class="locator-context-badge">' + escHtml(t('locator.frameChain', { count: frameCount })) + '</span>');
+      frameChain.forEach(function(frame, index) {
+        var frameTitle = t('locator.frameLevel', { level: index + 1 });
+        var frameIdentity = frame.name || shortLocatorUrl(frame.url);
+        parts.push('<span class="locator-context-badge" title="' + escAttr(frame.url || '') + '">' + escHtml(frameTitle + (frameIdentity ? ': ' + frameIdentity : '')) + '</span>');
+        if (frame.css) parts.push(renderLocatorContextCode('frameChainCss:' + index, frame.css));
+        else if (frame.xpath) parts.push(renderLocatorContextCode('frameChainXPath:' + index, frame.xpath));
+      });
     }
     if (item.shadow.hosts.length) {
       parts.push('<span class="locator-context-badge">' + escHtml(t('locator.shadow')) + ' × ' + item.shadow.hosts.length + '</span>');
@@ -6727,17 +7145,30 @@
     if (!item.recommended) messages.push(t('locator.noStable'));
     if (item.warnings.indexOf('TEXT_MAY_CHANGE') !== -1) messages.push(t('locator.textWarning'));
     if (!item.frame.isTopFrame) messages.push(t('locator.frameWarning'));
+    if (!item.frame.complete) messages.push(t('locator.frameIncompleteWarning'));
     if (item.shadow.hosts.length) messages.push(t('locator.shadowWarning'));
     return messages.length ? '<div class="locator-warning">' + escHtml(messages.join(' ')) + '</div>' : '';
   }
 
   function getLocatorField(item, field) {
     if (!item) return '';
+    if (field.indexOf('alternative:') === 0) {
+      var alternativeIndex = Number(field.split(':')[1]);
+      return item.alternatives && item.alternatives[alternativeIndex] && item.alternatives[alternativeIndex].selector || '';
+    }
     if (field === 'recommended') return item.recommended || '';
     if (field === 'css') return item.css || '';
     if (field === 'xpath') return item.xpath || '';
     if (field === 'frameCss') return item.frame && item.frame.css || '';
     if (field === 'frameXPath') return item.frame && item.frame.xpath || '';
+    if (field.indexOf('frameChainCss:') === 0) {
+      var cssFrameIndex = Number(field.split(':')[1]);
+      return item.frame && item.frame.chain && item.frame.chain[cssFrameIndex] && item.frame.chain[cssFrameIndex].css || '';
+    }
+    if (field.indexOf('frameChainXPath:') === 0) {
+      var xpathFrameIndex = Number(field.split(':')[1]);
+      return item.frame && item.frame.chain && item.frame.chain[xpathFrameIndex] && item.frame.chain[xpathFrameIndex].xpath || '';
+    }
     if (field === 'shadowChain') return item.shadow && item.shadow.cssChain || '';
     return '';
   }
@@ -6752,6 +7183,63 @@
     }
   }
 
+  function copyLocatorSeleniumCode(item) {
+    var generator = globalThis.ApiStudioSeleniumCodegen;
+    if (!generator || typeof generator.generate !== 'function') {
+      setLocatorStatus(t('locator.copySeleniumFailed'), 'error');
+      return;
+    }
+    var result = generator.generate(item, locatorCodeLanguage);
+    var blockingWarnings = ['LOCATOR_MISSING', 'SHADOW_HOST_LOCATOR_MISSING'];
+    var cannotUse = !result.code || result.warnings.some(function(warning) { return blockingWarnings.indexOf(warning) !== -1; });
+    if (cannotUse) {
+      setLocatorStatus(t('locator.copySeleniumFailed'), 'error');
+      return;
+    }
+    copyTextValue(result.code, t('locator.copySeleniumSuccess'));
+  }
+
+  function verifyLocatorItem(item) {
+    if (!item || !item.recommended || !ApiStudioCompat.sendTabMessage) return;
+    if (locatorVerificationById.get(item.id) === 'checking') return;
+    cancelLocatorVerificationForId(item.id);
+
+    var requestId = 'locator_verify_' + Date.now() + '_' + random(8);
+    locatorVerificationById.set(item.id, 'checking');
+    var timer = setTimeout(function() {
+      if (!locatorVerificationRequests.has(requestId)) return;
+      locatorVerificationRequests.delete(requestId);
+      locatorVerificationById.set(item.id, 'invalid');
+      renderLocatorTable();
+      setLocatorStatus(t('locator.verifyFailed'), 'error');
+    }, LOCATOR_VERIFY_TIMEOUT_MS);
+    locatorVerificationRequests.set(requestId, { locatorId: item.id, timer: timer });
+    renderLocatorTable();
+
+    ApiStudioCompat.sendTabMessage(getInspectedTabId(), {
+      type: '__API_STUDIO_LOCATOR_VERIFY__',
+      requestId: requestId,
+      data: cloneData(item)
+    }).catch(function() {
+      var pending = locatorVerificationRequests.get(requestId);
+      if (!pending) return;
+      clearTimeout(pending.timer);
+      locatorVerificationRequests.delete(requestId);
+      locatorVerificationById.set(item.id, 'invalid');
+      renderLocatorTable();
+      setLocatorStatus(t('locator.verifyFailed'), 'error');
+    });
+  }
+
+  function cancelLocatorVerificationForId(locatorId) {
+    locatorVerificationRequests.forEach(function(pending, requestId) {
+      if (pending.locatorId !== locatorId) return;
+      clearTimeout(pending.timer);
+      locatorVerificationRequests.delete(requestId);
+    });
+    locatorVerificationById.delete(locatorId);
+  }
+
   if (locatorPickBtn) {
     locatorPickBtn.addEventListener('click', function() {
       if (locatorPicking) stopLocatorPicker();
@@ -6761,11 +7249,29 @@
 
   if (locatorContinuous) locatorContinuous.addEventListener('change', refreshLocatorPickerMode);
 
+  if (locatorSearchInput) {
+    locatorSearchInput.addEventListener('input', function() {
+      locatorSearchQuery = locatorSearchInput.value || '';
+      renderLocatorTable();
+    });
+  }
+
+  if (locatorLanguageSelect) {
+    locatorLanguageSelect.addEventListener('change', function() {
+      locatorCodeLanguage = ['python', 'java', 'javascript'].indexOf(locatorLanguageSelect.value) !== -1 ? locatorLanguageSelect.value : 'python';
+      try { localStorage.setItem('apiStudioLocatorLanguage', locatorCodeLanguage); }
+      catch (error) {}
+    });
+  }
+
   if (locatorClearBtn) {
     locatorClearBtn.addEventListener('click', function() {
       if (!locatorHistory.length) return;
       var previous = locatorHistory.map(cloneData);
       locatorHistory = [];
+      locatorVerificationRequests.forEach(function(pending) { clearTimeout(pending.timer); });
+      locatorVerificationRequests.clear();
+      locatorVerificationById.clear();
       persistLocatorHistory();
       renderLocatorTable();
       showUndoToast(t('locator.cleared'), function() {
@@ -6790,9 +7296,22 @@
         return;
       }
 
+      var verifyButton = event.target.closest('[data-action="verify-locator"]');
+      if (verifyButton) {
+        verifyLocatorItem(item);
+        return;
+      }
+
+      var seleniumButton = event.target.closest('[data-action="copy-selenium"]');
+      if (seleniumButton) {
+        copyLocatorSeleniumCode(item);
+        return;
+      }
+
       var deleteButton = event.target.closest('[data-action="delete-locator"]');
       if (deleteButton) {
         var deleted = cloneData(item);
+        cancelLocatorVerificationForId(item.id);
         locatorHistory.splice(itemIndex, 1);
         persistLocatorHistory();
         renderLocatorTable();
@@ -6807,6 +7326,8 @@
 
   window.addEventListener('beforeunload', function() {
     if (locatorPicking) stopLocatorPicker({ silent: true });
+    locatorVerificationRequests.forEach(function(pending) { clearTimeout(pending.timer); });
+    locatorVerificationRequests.clear();
   });
 
   // ======================================================================
@@ -7564,7 +8085,7 @@
   }
 
   document.addEventListener('mouseenter', function(e) {
-    var hint = e.target.closest('.time-hint');
+    var hint = closestEventTarget(e, '.time-hint');
     if (!hint || !timeTooltip) return;
     timeTooltip.textContent = formatTimeSourceHint(hint.dataset.timeSource || '');
     timeTooltip.style.display = 'block';
@@ -7572,13 +8093,13 @@
   }, true);
 
   document.addEventListener('mousemove', function(e) {
-    var hint = e.target.closest('.time-hint');
+    var hint = closestEventTarget(e, '.time-hint');
     if (!hint || !timeTooltip || timeTooltip.style.display === 'none') return;
     positionTimeTooltip(e.clientX, e.clientY);
   }, true);
 
   document.addEventListener('mouseleave', function(e) {
-    var hint = e.target.closest('.time-hint');
+    var hint = closestEventTarget(e, '.time-hint');
     if (!hint || !timeTooltip) return;
     timeTooltip.style.display = 'none';
   }, true);
@@ -7902,6 +8423,7 @@
   // ======================================================================
 
   loadNetworkCapturePreferences();
+  loadLocatorPreferences();
   applyLocale();
   loadThemeMode();
   applyTheme(themeMode, false);

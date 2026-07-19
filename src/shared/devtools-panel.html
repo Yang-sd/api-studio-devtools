@@ -457,15 +457,25 @@
           <button class="btn btn-sm" id="locatorClearBtn" type="button" data-i18n="common.clear">清空</button>
         </div>
       </div>
+      <div class="locator-tools">
+        <div class="locator-search-wrap">
+          <span class="locator-search-icon" aria-hidden="true">⌕</span>
+          <input class="form-input locator-search" id="locatorSearchInput" type="search" placeholder="搜索元素、页面或定位" data-i18n-placeholder="locator.searchPlaceholder">
+        </div>
+        <span class="locator-count" id="locatorCount">0</span>
+        <select class="form-select form-select-sm locator-language" id="locatorLanguageSelect" title="Selenium 代码语言" data-i18n-title="locator.languageTitle">
+          <option value="python">Selenium · Python</option>
+          <option value="java">Selenium · Java</option>
+          <option value="javascript">Selenium · JavaScript</option>
+        </select>
+      </div>
       <div class="locator-note" data-i18n="locator.policy">只生成经过唯一性验证的稳定定位；不会生成 nth-child、绝对数字 XPath 或屏幕坐标。</div>
       <div class="locator-table-scroll">
         <table class="locator-table">
           <thead>
             <tr>
               <th class="locator-col-element" data-i18n="locator.element">元素</th>
-              <th class="locator-col-recommended" data-i18n="locator.recommended">推荐定位</th>
-              <th class="locator-col-css">CSS</th>
-              <th class="locator-col-xpath">XPath</th>
+              <th class="locator-col-recommended" data-i18n="locator.recommended">定位推荐</th>
               <th class="locator-col-context" data-i18n="locator.context">上下文</th>
               <th class="locator-col-actions" data-i18n="locator.actions">操作</th>
             </tr>
@@ -473,8 +483,8 @@
           <tbody id="locatorTableBody"></tbody>
         </table>
         <div class="empty-state locator-empty" id="locatorEmpty">
-          <p data-i18n="locator.emptyTitle">还没有拾取元素</p>
-          <p class="hint" data-i18n="locator.emptyHint">点击“拾取元素”，然后在被调试页面中点击目标控件。</p>
+          <p id="locatorEmptyTitle" data-i18n="locator.emptyTitle">还没有拾取元素</p>
+          <p class="hint" id="locatorEmptyHint" data-i18n="locator.emptyHint">点击“拾取元素”，然后在被调试页面中点击目标控件。</p>
         </div>
       </div>
     </div>
@@ -571,10 +581,13 @@
       </div>
     </div>
   </div>
+
 </div>
 
 <script src="compat.js"></script>
 <script src="qr-code.js"></script>
+<script src="locator-engine.js"></script>
+<script src="selenium-codegen.js"></script>
 <script src="devtools-panel.js"></script>
 </body>
 </html>

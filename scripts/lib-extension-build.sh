@@ -25,6 +25,7 @@ copy_shared_files() {
   cp "$SHARED_DIR"/qr-code.js "$out_dir"/
   cp "$SHARED_DIR"/inject.js "$out_dir"/
   cp "$SHARED_DIR"/locator-engine.js "$out_dir"/
+  cp "$SHARED_DIR"/selenium-codegen.js "$out_dir"/
 }
 
 # 图标和文案也按共享资源复制，便于多浏览器共用同一套视觉资产。

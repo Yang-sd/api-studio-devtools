@@ -17,6 +17,8 @@
   let locatorLabel = null;
   let locatorStyle = null;
   let locatorPreviousCursor = '';
+  let locatorVerifyOverlay = null;
+  let locatorVerifyTimer = null;
 
   // content script 负责桥接页面上下文和扩展存储；真正改写 fetch/XHR 的逻辑在 inject.js。
 
@@ -107,6 +109,7 @@
   }
 
   extensionApi.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    message = message || {};
     if (message.type === '__MOCK_REFRESH_RULES__') loadState();
     if (message.type === '__API_STUDIO_LOCATOR_START__') {
       startLocatorPicker(message.sessionId, message.continuous);
@@ -116,6 +119,11 @@
     if (message.type === '__API_STUDIO_LOCATOR_STOP__') {
       stopLocatorPicker();
       if (sendResponse) sendResponse({ success: true });
+      return false;
+    }
+    if (message.type === '__API_STUDIO_LOCATOR_VERIFY__') {
+      verifySavedLocator(message);
+      if (sendResponse) sendResponse({ accepted: true });
       return false;
     }
   });
@@ -278,7 +286,7 @@
 
   function onLocatorPointerMove(event) {
     if (!locatorActive) return;
-    var target = locatorEventElement(event);
+    var target = locatorPreferredElement(locatorEventElement(event));
     if (!target || isLocatorUi(target) || target === locatorTarget) return;
     locatorTarget = target;
     refreshLocatorOverlay();
@@ -293,7 +301,7 @@
 
   function onLocatorClick(event) {
     if (!locatorActive) return;
-    var target = locatorEventElement(event) || locatorTarget;
+    var target = locatorPreferredElement(locatorEventElement(event) || locatorTarget);
     if (!target || isLocatorUi(target)) return;
     event.preventDefault();
     event.stopPropagation();
@@ -370,6 +378,13 @@
     return !!(element && element.getAttribute && element.getAttribute('data-api-studio-locator-ui'));
   }
 
+  function locatorPreferredElement(element) {
+    var engine = globalThis.ApiStudioLocatorEngine;
+    if (!element || !engine || typeof engine.resolveTarget !== 'function') return element;
+    try { return engine.resolveTarget(element) || element; }
+    catch (error) { return element; }
+  }
+
   function locatorElementPreview(element) {
     var tag = String(element && (element.localName || element.tagName) || '').toLowerCase();
     var id = safeLocatorAttribute(element, 'id');
@@ -385,7 +400,153 @@
     catch (error) { return ''; }
   }
 
-  window.addEventListener('pagehide', stopLocatorPicker);
+  // 每个 frame 都会收到验证消息，只由采集上下文匹配的 frame 回传成功结果。
+  function verifySavedLocator(message) {
+    var item = message && message.data;
+    var requestId = String(message && message.requestId || '');
+    if (!requestId || !item || typeof item !== 'object' || !matchesLocatorFrame(item)) return;
+
+    var match = findSavedLocatorElement(item);
+    if (!match) return;
+    highlightVerifiedLocator(match);
+    ApiStudioCompat.sendMessage({
+      type: '__API_STUDIO_LOCATOR_VERIFIED__',
+      requestId: requestId,
+      locatorId: String(item.id || ''),
+      success: true
+    }).catch(function() {});
+  }
+
+  function matchesLocatorFrame(item) {
+    var expected = item.frame && typeof item.frame === 'object' ? item.frame : {};
+    var expectedChain = Array.isArray(expected.chain) ? expected.chain : [];
+    var isTopFrame = false;
+    try { isTopFrame = window.top === window; }
+    catch (error) { isTopFrame = false; }
+    if ((expected.isTopFrame !== false) !== isTopFrame) return false;
+    if (isTopFrame) return true;
+
+    var expectedDepth = Number(expected.depth || expectedChain.length || 1);
+    if (expectedDepth > 0 && getCurrentFrameDepth() !== expectedDepth) return false;
+    var currentExpectedFrame = expectedChain.length ? expectedChain[expectedChain.length - 1] : expected;
+    var expectedUrl = String(currentExpectedFrame.url || expected.url || item.pageUrl || '');
+    if (expectedUrl && !sameLocatorDocumentUrl(expectedUrl, window.location.href)) return false;
+    var expectedName = String(currentExpectedFrame.name || expected.name || '');
+    if (expectedName && window.name && expectedName !== window.name) return false;
+    return true;
+  }
+
+  function getCurrentFrameDepth() {
+    var depth = 0;
+    var current = window;
+    while (current && depth < 8) {
+      try {
+        if (current === current.top) break;
+        current = current.parent;
+        depth++;
+      } catch (error) {
+        depth++;
+        break;
+      }
+    }
+    return depth;
+  }
+
+  function sameLocatorDocumentUrl(left, right) {
+    try {
+      var leftUrl = new URL(left);
+      var rightUrl = new URL(right);
+      return leftUrl.origin === rightUrl.origin && leftUrl.pathname === rightUrl.pathname && leftUrl.search === rightUrl.search;
+    } catch (error) {
+      return String(left || '').split('#')[0] === String(right || '').split('#')[0];
+    }
+  }
+
+  function findSavedLocatorElement(item) {
+    var shadow = item.shadow && typeof item.shadow === 'object' ? item.shadow : {};
+    var hosts = Array.isArray(shadow.hosts) ? shadow.hosts : [];
+    if (hosts.length) {
+      var root = document;
+      for (var i = 0; i < hosts.length; i++) {
+        var host = findUniqueLocatorCss(root, hosts[i] && hosts[i].css);
+        if (!host || !host.shadowRoot) return null;
+        root = host.shadowRoot;
+      }
+      return findUniqueLocatorCss(root, shadow.localCss || item.css);
+    }
+
+    var selector = String(item.recommended || item.css || item.xpath || '');
+    var type = item.recommended ? item.recommendedType : (item.css ? 'css' : 'xpath');
+    return type === 'xpath' ? findUniqueLocatorXPath(document, selector) : findUniqueLocatorCss(document, selector);
+  }
+
+  function findUniqueLocatorCss(root, selector) {
+    if (!root || !selector || typeof root.querySelectorAll !== 'function') return null;
+    try {
+      var matches = root.querySelectorAll(String(selector));
+      return matches.length === 1 ? matches[0] : null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function findUniqueLocatorXPath(doc, selector) {
+    if (!doc || !selector || typeof doc.evaluate !== 'function') return null;
+    try {
+      var result = doc.evaluate(String(selector), doc, null, 7, null);
+      return result.snapshotLength === 1 ? result.snapshotItem(0) : null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function highlightVerifiedLocator(element) {
+    clearLocatorVerifyOverlay();
+    if (!element || typeof element.getBoundingClientRect !== 'function') return;
+    try { element.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' }); }
+    catch (error) {}
+
+    locatorVerifyOverlay = document.createElement('div');
+    locatorVerifyOverlay.setAttribute('data-api-studio-locator-ui', 'verified');
+    locatorVerifyOverlay.style.cssText = [
+      'all:initial',
+      'position:fixed',
+      'pointer-events:none',
+      'z-index:2147483647',
+      'border:3px solid #16a34a',
+      'background:rgba(22,163,74,.14)',
+      'box-shadow:0 0 0 4px rgba(22,163,74,.16)',
+      'box-sizing:border-box',
+      'transition:opacity .2s ease'
+    ].join(';');
+    (document.documentElement || document.body).appendChild(locatorVerifyOverlay);
+
+    var positionOverlay = function() {
+      if (!locatorVerifyOverlay) return;
+      var rect;
+      try { rect = element.getBoundingClientRect(); }
+      catch (error) { return; }
+      locatorVerifyOverlay.style.left = Math.max(0, rect.left) + 'px';
+      locatorVerifyOverlay.style.top = Math.max(0, rect.top) + 'px';
+      locatorVerifyOverlay.style.width = Math.max(1, rect.width) + 'px';
+      locatorVerifyOverlay.style.height = Math.max(1, rect.height) + 'px';
+    };
+    positionOverlay();
+    setTimeout(positionOverlay, 180);
+    locatorVerifyTimer = setTimeout(clearLocatorVerifyOverlay, 1500);
+  }
+
+  function clearLocatorVerifyOverlay() {
+    if (locatorVerifyTimer) clearTimeout(locatorVerifyTimer);
+    locatorVerifyTimer = null;
+    if (locatorVerifyOverlay) locatorVerifyOverlay.remove();
+    locatorVerifyOverlay = null;
+  }
+
+  window.addEventListener('pagehide', function() {
+    stopLocatorPicker();
+    clearLocatorVerifyOverlay();
+  });
 
   function hasEnabledRules() {
     return ruleCache.some(function(rule) {

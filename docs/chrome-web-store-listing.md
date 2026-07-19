@@ -27,7 +27,7 @@ API Studio DevTools 是一款面向前端开发和测试场景的浏览器 DevTo
 - Mock：从真实请求快速生成本地 Mock 规则，支持分组、启停和命中计数。
 - Beacon：分析埋点上报请求，支持嵌套字段和重复 key 匹配。
 - Cookies：查看请求 Cookie 和响应 Set-Cookie，便于调试登录态与会话问题。
-- Locator：在页面中拾取元素，生成经过唯一性验证的 CSS/XPath，并识别 iframe 与 Shadow DOM。
+- Locator：在页面中拾取元素，综合属性、class、文本和上下文生成“最优、备选、兜底”三档唯一定位，展示命中依据与稳定性评分；支持重新验证、高亮目标和复制 Python、Java、JavaScript Selenium 代码，并兼容嵌套 iframe 与 Shadow DOM。
 - Theme：支持自动、浅色、深色主题切换。
 
 数据处理说明：
@@ -63,7 +63,7 @@ The extension does not modify system hosts files and does not provide a remote c
 - DevTools 中 API Studio 的 Network 面板。
 - Replay 请求编辑器，展示请求体类型切换。
 - Mock 规则列表和命中计数。
-- Locator 元素高亮与 CSS/XPath 结果表格。
+- Locator 元素高亮与“最优、备选、兜底”定位推荐结果。
 - 深色模式界面。
 
 ## 提交前检查
